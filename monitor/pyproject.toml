@@ -9,7 +9,18 @@ description = "Local debugging dashboard for Linksys Velop mesh networks: node h
 readme = "README.md"
 requires-python = ">=3.9"
 license = { text = "MIT" }
-keywords = ["linksys", "velop", "mesh", "wifi", "monitoring", "jnap"]
+authors = [{ name = "Jon Rasmussen" }]
+keywords = ["linksys", "velop", "mesh", "wifi", "monitoring", "jnap", "mcp"]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Environment :: Web Environment",
+  "Intended Audience :: End Users/Desktop",
+  "License :: OSI Approved :: MIT License",
+  "Operating System :: MacOS",
+  "Operating System :: POSIX :: Linux",
+  "Programming Language :: Python :: 3",
+  "Topic :: System :: Networking :: Monitoring",
+]
 dependencies = []
 
 [project.scripts]
