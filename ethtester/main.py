@@ -5,7 +5,7 @@ import logging
 import time
 from pathlib import Path
 
-from . import __version__
+from . import __version__, watchdog
 from .collector import Collector
 from .config import DEFAULT_CONFIG_PATH, Config, load_config
 from .display import Display, make_backend
@@ -20,7 +20,8 @@ FAST_CODES = ("NO_LINK", "WAIT_DHCP")
 
 
 def run(cfg: Config, collector, display: Display, statelog: StateLogger,
-        sleep=time.sleep, wall=time.time, ticks: int | None = None) -> None:
+        sleep=time.sleep, wall=time.time, ticks: int | None = None,
+        notify=watchdog.notify) -> None:
     done = 0
     while ticks is None or done < ticks:
         done += 1
@@ -38,6 +39,7 @@ def run(cfg: Config, collector, display: Display, statelog: StateLogger,
             display.update(render(build_rows(snapshot, verdict), verdict, clock_text), verdict.code)
         except Exception:
             log.exception("tick failed")
+        notify("WATCHDOG=1")
         sleep(delay)
 
 

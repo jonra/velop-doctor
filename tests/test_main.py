@@ -51,3 +51,16 @@ def test_run_survives_statelog_failure(tmp_path: Path):
 
     assert delays == [FAST_INTERVAL]
     assert Image.open(tmp_path / "s.png").size == (250, 122)
+
+
+def test_run_pets_watchdog_every_tick_even_when_tick_fails(tmp_path: Path):
+    cfg = Config(display="png", png_path=str(tmp_path / "s.png"), interval=5)
+    collector = ScriptedCollector(Snapshot(link=LinkResult(up=False)),
+                                  RuntimeError("boom"),
+                                  ok_snapshot())
+    sent = []
+    run(cfg, collector, Display(PngBackend(Path(cfg.png_path))),
+        StateLogger(tmp_path / "state.log"), sleep=lambda s: None,
+        wall=lambda: 1_700_000_000, ticks=3, notify=sent.append)
+
+    assert sent == ["WATCHDOG=1"] * 3

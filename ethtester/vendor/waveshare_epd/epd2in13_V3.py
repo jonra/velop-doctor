@@ -30,12 +30,15 @@
 
 import logging
 from . import epdconfig
+from ...busywait import wait_until  # ethtester: bounded busy wait
 
 # Display resolution
 EPD_WIDTH       = 122
 EPD_HEIGHT      = 250
 
 logger = logging.getLogger(__name__)
+
+BUSY_TIMEOUT_S = 10  # ethtester: give up on a stuck BUSY pin
 
 class EPD:
     def __init__(self):
@@ -137,8 +140,9 @@ class EPD:
     '''
     def ReadBusy(self):
         logger.debug("e-Paper busy")
-        while(epdconfig.digital_read(self.busy_pin) == 1):      # 0: idle, 1: busy
-            epdconfig.delay_ms(10)  
+        # ethtester: was an unbounded loop; raise TimeoutError after BUSY_TIMEOUT_S
+        wait_until(lambda: epdconfig.digital_read(self.busy_pin) == 0,      # 0: idle, 1: busy
+                   BUSY_TIMEOUT_S, message="e-paper busy timeout")
         logger.debug("e-Paper busy release")
 
     '''
