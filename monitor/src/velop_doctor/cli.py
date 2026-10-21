@@ -164,7 +164,40 @@ def cmd_mcp(args):
     cfg = config.load()
     url = args.url or os.environ.get("VELOP_DOCTOR_URL") or f"http://127.0.0.1:{args.port or cfg.port}"
     read_only = args.read_only or os.environ.get("VELOP_DOCTOR_MCP_READONLY") == "1"
-    build_server(Dashboard(url), read_only=read_only).serve_stdio()
+    server = build_server(Dashboard(url), read_only=read_only)
+    if not args.http:
+        server.serve_stdio()
+        return 0
+    from .mcp_http import serve_http
+    token = config.get_mcp_token()
+    app, httpd = serve_http(server, token, args.host, args.listen_port, allow_origins=args.allow_origin or ())
+    shown = "localhost" if args.host in ("127.0.0.1", "0.0.0.0") else args.host
+    print(f"velop-doctor MCP over HTTP: http://{shown}:{args.listen_port}/mcp"
+          f"   (reads the dashboard at {url}; {'read-only; ' if read_only else ''}Ctrl-C to stop)")
+    print(f"\nBearer token (every request needs it): {token}")
+    print(f'Claude Code:  claude mcp add --transport http velop-doctor http://{shown}:{args.listen_port}/mcp '
+          f'--header "Authorization: Bearer {token}"\n')
+    if not app.loopback:
+        print("WARNING: listening beyond this computer. The token is the only protection and the connection "
+              "is plain HTTP: use it only on a network you trust (a VPN such as Tailscale is ideal).")
+    try:
+        httpd.serve_forever()
+    except KeyboardInterrupt:
+        pass
+    finally:
+        httpd.server_close()
+    return 0
+
+
+def cmd_mcp_token(args):
+    token = config.get_mcp_token(rotate=args.rotate)
+    cfg = config.load()
+    url = f"http://localhost:{args.listen_port}/mcp"
+    print(f"{'New token' if args.rotate else 'Token'} (stored in {config.mcp_token_path()}, mode 600):\n  {token}\n")
+    print("Claude Code:")
+    print(f'  claude mcp add --transport http velop-doctor {url} --header "Authorization: Bearer {token}"')
+    print("\nAnything else that speaks MCP over HTTP: URL above, header 'Authorization: Bearer <token>'.")
+    print("Anyone with this token can use the tools, including rebooting nodes. Rotate it with --rotate.")
     return 0
 
 
@@ -204,7 +237,16 @@ def main(argv=None):
     s.add_argument("--port", type=int, help="port of the running dashboard (default: from config, 8765)")
     s.add_argument("--url", help="full dashboard URL, overrides --port")
     s.add_argument("--read-only", action="store_true", help="do not offer the steering and reboot tools")
+    s.add_argument("--http", action="store_true", help="serve MCP over HTTP (bearer token required) instead of stdio")
+    s.add_argument("--host", default="127.0.0.1", help="HTTP listen address (default 127.0.0.1; use 0.0.0.0 or a VPN address to reach it from elsewhere)")
+    s.add_argument("--listen-port", type=int, default=8780, help="HTTP listen port (default 8780)")
+    s.add_argument("--allow-origin", action="append", help="extra browser Origin to accept (repeatable)")
     s.set_defaults(func=cmd_mcp)
+
+    s = sub.add_parser("mcp-token", help="show (or --rotate) the bearer token for MCP over HTTP")
+    s.add_argument("--rotate", action="store_true", help="invalidate the old token and make a new one")
+    s.add_argument("--listen-port", type=int, default=8780)
+    s.set_defaults(func=cmd_mcp_token)
 
     s = sub.add_parser("install-service", help="start the dashboard automatically at login")
     s.add_argument("--port", type=int, default=8765)

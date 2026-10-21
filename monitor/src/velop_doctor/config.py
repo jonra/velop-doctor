@@ -71,6 +71,31 @@ def save(cfg):
     path.write_text(json.dumps(data, indent=2) + "\n")
 
 
+# --- access token for the MCP HTTP transport ------------------------------------
+
+def mcp_token_path():
+    return home_dir() / "mcp-token"
+
+
+def get_mcp_token(rotate=False):
+    """The bearer token MCP-over-HTTP clients must send. Created on first use, mode 0600."""
+    import secrets
+    path = mcp_token_path()
+    if not rotate:
+        try:
+            token = path.read_text().strip()
+            if token:
+                return token
+        except OSError:
+            pass
+    path.parent.mkdir(parents=True, exist_ok=True)
+    token = secrets.token_urlsafe(32)
+    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "w") as f:
+        f.write(token + "\n")
+    return token
+
+
 # --- password storage -------------------------------------------------------
 
 def _account(cfg):

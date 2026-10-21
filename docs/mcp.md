@@ -25,6 +25,34 @@ claude mcp add velop-doctor -- velop-doctor mcp --port 8765
 
 Add `--read-only` to leave out the tools that change anything.
 
+### Over HTTP instead
+
+For clients that connect to a URL rather than starting a command:
+
+```bash
+velop-doctor mcp --http --port 8765       # --port is the dashboard's, as above
+```
+
+On startup it prints the **bearer token** and a ready-to-paste command:
+
+```bash
+claude mcp add --transport http velop-doctor http://localhost:8780/mcp \
+  --header "Authorization: Bearer <token>"
+```
+
+- URL: `http://localhost:8780/mcp` (`--listen-port` changes it). Every request must carry
+  `Authorization: Bearer <token>`; there is no way to turn that off.
+- The token lives in `~/.velop-doctor/mcp-token` (mode 600), is created on first use, and
+  `velop-doctor mcp-token` shows it again. `velop-doctor mcp-token --rotate` replaces it.
+- It listens on `127.0.0.1` only. To reach it from another machine, pass `--host` (a VPN address such
+  as Tailscale's, or `0.0.0.0`). That is plain HTTP and the token is the only protection, so only do it
+  on a network you trust. There is no TLS.
+- Not supported: claude.ai custom connectors, which need a public HTTPS address and OAuth.
+- It speaks the MCP Streamable HTTP transport (spec 2025-06-18): one endpoint, JSON replies, sessions
+  via `Mcp-Session-Id`, no server-initiated stream. Browsers cannot drive it: `Origin` is checked, and on
+  a loopback listener so is `Host`.
+- If you run it as a background service, the startup message, token included, goes to that service's log.
+
 ## Tools
 
 | Tool | What it does | Changes anything? |
@@ -53,8 +81,9 @@ Add `--read-only` to leave out the tools that change anything.
 - **Everything is validated.** Hosts must be an IPv4 address or a hostname (nothing that could be read
   as a command-line option), counts are bounded, and node names are looked up in the latest snapshot,
   never sent as raw addresses.
-- **Nothing is exposed on the network.** The server speaks over stdio to your client. The dashboard it
-  talks to listens on `127.0.0.1` only, and write calls need a per-run token.
+- **Nothing is exposed on the network by default.** Over stdio the server talks only to your client. The
+  HTTP form listens on `127.0.0.1` and demands a bearer token on every request. The dashboard it talks to
+  also listens on `127.0.0.1` only, and its write calls need a per-run token.
 - **Network data is data.** Device names, Wi-Fi names and similar text come from your network, which
   anyone nearby can influence. The server's instructions tell Claude to treat them as data, never as
   instructions. Use `--read-only` if you want no write path at all.

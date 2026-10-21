@@ -103,10 +103,14 @@ class McpServer:
         self._by_name = {t.name: t for t in self.tools}
 
     # --- message handling -------------------------------------------------------
-    def handle(self, message):
-        """Process one decoded JSON-RPC message; returns the response, or None for notifications."""
+    def handle(self, message, protocol=None):
+        """Process one decoded JSON-RPC message; returns the response, or None for notifications.
+
+        `protocol` is the version a session negotiated. stdio has one session, so it defaults to
+        the version remembered from the last initialize; HTTP passes each session's own.
+        """
         if isinstance(message, list):  # batches were allowed before 2025-06-18
-            replies = [r for r in (self.handle(m) for m in message) if r is not None]
+            replies = [r for r in (self.handle(m, protocol) for m in message) if r is not None]
             return replies or None
         if not isinstance(message, dict) or message.get("jsonrpc") != "2.0" or "method" not in message:
             return self._error(message.get("id") if isinstance(message, dict) else None,
@@ -123,7 +127,7 @@ class McpServer:
             if method == "tools/list":
                 return self._ok(mid, {"tools": [t.listing() for t in self.tools]})
             if method == "tools/call":
-                return self._call(mid, params)
+                return self._call(mid, params, protocol or self.protocol)
         except Exception as exc:  # a bug must not kill the connection
             print(f"velop-doctor mcp: internal error in {method}: {exc!r}", file=sys.stderr)
             return self._error(mid, -32603, "internal error")
@@ -139,7 +143,7 @@ class McpServer:
             result["instructions"] = self.instructions
         return result
 
-    def _call(self, mid, params):
+    def _call(self, mid, params, protocol):
         tool = self._by_name.get(params.get("name"))
         if tool is None:
             return self._error(mid, INVALID_PARAMS, f"unknown tool: {str(params.get('name'))[:60]}")
@@ -154,9 +158,9 @@ class McpServer:
         except Exception as exc:
             print(f"velop-doctor mcp: tool {tool.name} crashed: {exc!r}", file=sys.stderr)
             return self._ok(mid, self._tool_error(f"{tool.name} failed unexpectedly."))
-        return self._ok(mid, self._tool_result(out))
+        return self._ok(mid, self._tool_result(out, protocol))
 
-    def _tool_result(self, out):
+    def _tool_result(self, out, protocol):
         if isinstance(out, ToolResult):
             text, data = out.text, out.data
         elif isinstance(out, str):
@@ -164,7 +168,7 @@ class McpServer:
         else:
             text, data = json.dumps(out, indent=2), out
         result = {"content": [{"type": "text", "text": text}], "isError": False}
-        if isinstance(data, dict) and self.protocol >= "2025-06-18":
+        if isinstance(data, dict) and protocol >= "2025-06-18":
             result["structuredContent"] = data  # the spec wants an object here, never a list
         return result
 

@@ -34,6 +34,8 @@ Other commands:
 velop-doctor check                   # one-off report in the terminal; exit code 0 / 1 / 2 = ok / warnings / critical
 velop-doctor steering on             # change client steering from the terminal
 velop-doctor mcp --port 8765          # MCP server for Claude (stdio); needs the dashboard running
+velop-doctor mcp --http --port 8765   # the same over HTTP, with a bearer token printed at startup
+velop-doctor mcp-token                # show (or --rotate) that token
 velop-doctor install-service         # start the dashboard at login (launchd / systemd --user)
 velop-doctor uninstall-service
 ```
@@ -78,7 +80,7 @@ collector ──▶ snapshot (JSON) ──▶ analyzer ──▶ findings ──
   password**. A node that answers pings but rejects the password is not following
   the main node's settings. That is how a half-added node gives itself away.
 - `analyzer.py` is pure functions over snapshots, so it is easy to test.
-- `mcp_server.py` and `mcp_tools.py` are the MCP server: a small standard-library JSON-RPC layer over stdio, and the tools, which call the dashboard's local API.
+- `mcp_server.py`, `mcp_http.py` and `mcp_tools.py` are the MCP server: a small standard-library JSON-RPC layer, its stdio and Streamable HTTP transports, and the tools, which call the dashboard's local API.
 - `diagnostics.py` validates and runs the on-demand ping and DNS lookups.
 - `probes.py` holds the active probes (ping with jitter, DNS, TCP, MTU, router-side ping, DHCP, host Wi-Fi), each of which gives up quickly and never raises.
 - `store.py` only reports a finding after it has persisted for its `min_seconds`,
