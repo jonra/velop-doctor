@@ -54,6 +54,18 @@ def test_rows_slow_link_and_gateway_fail():
     assert rows[3] == Row("GW", FAIL, "192.168.1.1  100% loss")
 
 
+def test_rows_adapter_limited_link_is_ok_and_says_why():
+    rows = rows_for(ok_snapshot(link=LinkResult(up=True, speed_mbps=100, duplex="full", max_speed_mbps=100)))
+    assert rows[0] == Row("LINK", OK, "100M (adapter) full  flaps:0")
+
+
+def test_adapter_note_fits_the_screen():
+    draw = ImageDraw.Draw(render_message("x", "y"))
+    text = build_rows(ok_snapshot(link=LinkResult(up=True, speed_mbps=100, duplex="full", max_speed_mbps=100)),
+                      Verdict("OK", "OK"))[0].text
+    assert draw.textlength(text, font=ROW_FONT) <= WIDTH - 46 - 2
+
+
 def test_fit_truncates_to_width():
     draw = ImageDraw.Draw(render_message("x", "y"))
     text = _fit(draw, "a-very-long-switch-name-that-goes-on / GigabitEthernet1/0/48", ROW_FONT, 200)
@@ -71,6 +83,8 @@ def test_render_samples():
         "ok": ok_snapshot(),
         "no_link": Snapshot(link=LinkResult(up=False)),
         "cable_100m": ok_snapshot(link=LinkResult(up=True, speed_mbps=100, duplex="full")),
+        "adapter_100m": ok_snapshot(link=LinkResult(up=True, speed_mbps=100, duplex="full",
+                                                     max_speed_mbps=100)),
         "no_dhcp": ok_snapshot(dhcp=DhcpResult(), seconds_since_link=30.0, lldp=None,
                                lldp_given_up=True, gateway=None, dns=None, internet=None),
     }

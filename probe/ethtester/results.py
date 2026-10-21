@@ -9,6 +9,7 @@ class LinkResult:
     speed_mbps: int | None = None
     duplex: str | None = None
     carrier_changes: int = 0
+    max_speed_mbps: int | None = None  # fastest speed the adapter supports; None if unknown
 
 
 @dataclass(frozen=True)

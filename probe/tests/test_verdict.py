@@ -35,6 +35,49 @@ def test_slow_link_ok_when_expected_is_100():
     assert evaluate(s, 100, 20).code == "OK"
 
 
+def link(speed, max_speed):
+    return LinkResult(up=True, speed_mbps=speed, duplex="full", max_speed_mbps=max_speed)
+
+
+def test_fast_ethernet_dongle_at_100_is_not_a_cable_fault():
+    """The real case: a 10/100 USB dongle on a good cable used to say CABLE? (100M)."""
+    v = evaluate(ok_snapshot(link=link(100, 100)), 1000, 20)
+    assert (v.code, v.text) == ("OK", "OK (adapter 100M)")
+
+
+def test_gigabit_adapter_stuck_at_100_still_blames_the_cable():
+    v = evaluate(ok_snapshot(link=link(100, 1000)), 1000, 20)
+    assert (v.code, v.text) == ("SLOW_LINK", "CABLE? (100M)")
+
+
+def test_unknown_adapter_ceiling_keeps_the_old_behaviour():
+    v = evaluate(ok_snapshot(link=link(100, None)), 1000, 20)
+    assert (v.code, v.text) == ("SLOW_LINK", "CABLE? (100M)")
+
+
+def test_fast_ethernet_dongle_negotiating_10_is_still_slow():
+    assert code(ok_snapshot(link=link(10, 100))) == "SLOW_LINK"
+
+
+def test_configured_expectation_still_lowers_the_bar():
+    s = ok_snapshot(link=link(100, 1000))
+    assert evaluate(s, 100, 20).code == "OK"
+    assert evaluate(s, 100, 20).text == "OK", "gigabit adapter at 100 by choice is not an adapter limit"
+
+
+def test_multigig_adapter_on_gigabit_cable_is_fine():
+    s = ok_snapshot(link=link(1000, 2500))
+    assert (evaluate(s, 1000, 20).code, evaluate(s, 1000, 20).text) == ("OK", "OK")
+    assert code(ok_snapshot(link=link(100, 2500))) == "SLOW_LINK"
+
+
+def test_adapter_limit_does_not_hide_later_failures():
+    s = ok_snapshot(link=link(100, 100), dhcp=DhcpResult(), seconds_since_link=60.0,
+                    gateway=None, dns=None, internet=None)
+    assert code(s) == "NO_DHCP"
+    assert code(ok_snapshot(link=link(100, 100), flaps_last_minute=5)) == "FLAPPING"
+
+
 def test_unknown_speed_is_not_slow():
     assert code(ok_snapshot(link=LinkResult(up=True, speed_mbps=None))) == "OK"
 

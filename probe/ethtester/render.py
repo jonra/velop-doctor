@@ -6,7 +6,7 @@ from pathlib import Path
 from PIL import Image, ImageDraw, ImageFont
 
 from .results import Snapshot
-from .verdict import MAX_LOSS_PCT, Verdict
+from .verdict import MAX_LOSS_PCT, Verdict, adapter_limited
 
 WIDTH, HEIGHT = 250, 122
 OK, FAIL, SKIP, WAIT = "ok", "fail", "skip", "wait"
@@ -49,6 +49,8 @@ def _link_row(s: Snapshot, v: Verdict) -> Row:
     if not s.link.up:
         return Row("LINK", FAIL, "down")
     speed = f"{s.link.speed_mbps}M" if s.link.speed_mbps else "?M"
+    if adapter_limited(s.link):
+        speed += " (adapter)"  # the dongle's ceiling, not a cable fault
     text = f"{speed} {s.link.duplex or '?'}  flaps:{s.flaps_last_minute}"
     return Row("LINK", FAIL if v.code in ("SLOW_LINK", "FLAPPING") else OK, text)
 

@@ -16,6 +16,7 @@ def fingerprint(s: Snapshot, v: Verdict) -> tuple:
         v.code,
         s.link.up,
         s.link.speed_mbps,
+        s.link.max_speed_mbps,
         s.link.duplex,
         s.dhcp.ip if s.dhcp else None,
         (s.lldp.switch_name, s.lldp.port) if s.lldp else None,

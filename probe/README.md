@@ -5,7 +5,8 @@ A Pi Zero with a USB Ethernet dongle and a Waveshare 2.13" e-ink HAT. Plug it in
 | Screen says | Likely cause |
 |---|---|
 | `NO LINK` | Cable, wall plug, or dead switch port |
-| `CABLE? (100M)` | Damaged cable/termination (gigabit fell back to 100) |
+| `CABLE? (100M)` | Damaged cable/termination: the link negotiated below what the dongle supports (gigabit fell back to 100) |
+| `OK (adapter 100M)` | Fine. The dongle itself only does 10/100, so 100M is its ceiling and says nothing about the cable |
 | `FLAPPING` | Loose plug or worn connector |
 | `NO DHCP` | Router/DHCP, or port on the wrong VLAN |
 | `GATEWAY` | Router or VLAN configuration |
@@ -18,7 +19,7 @@ A Pi Zero with a USB Ethernet dongle and a Waveshare 2.13" e-ink HAT. Plug it in
 2. Boot the Pi and copy this folder over:
    `scp -r ethernet-tester <user>@<pi-ip>:`
 3. On the Pi, run `sudo ethernet-tester/deploy/install.sh`
-4. In `/boot/firmware/ethtester.toml`, check that `display` matches the sticker on the back of the HAT (default `"V4"`). If your dongle is a 10/100 model, also set `expected_speed = 100`.
+4. In `/boot/firmware/ethtester.toml`, check that `display` matches the sticker on the back of the HAT (default `"V4"`). `expected_speed` is optional: the tester reads the dongle's supported speeds with `ethtool` (the installer adds it), so a 10/100 dongle at 100M is reported as fine. Set it only to lower the bar further, for example to `100` for a link you know is 100M by design.
 5. Reboot.
 
 To update, or after changing `interface` in the config, copy the folder over again and re-run `install.sh`; it updates the network profile and restarts the service, so no reboot is needed.

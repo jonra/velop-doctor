@@ -23,3 +23,11 @@ def test_logs_only_on_meaningful_change(tmp_path: Path):
     assert lines[1]["text"] == "CABLE? (100M)"
     assert lines[1]["snapshot"]["link"]["speed_mbps"] == 100
     assert "ts" in lines[0]
+
+
+def test_swapping_the_dongle_is_logged(tmp_path: Path):
+    logger = StateLogger(tmp_path / "ethtester.log")
+    fast_ethernet = replace(ok_snapshot(), link=LinkResult(up=True, speed_mbps=100, duplex="full", max_speed_mbps=100))
+    gigabit_stuck = replace(ok_snapshot(), link=LinkResult(up=True, speed_mbps=100, duplex="full", max_speed_mbps=1000))
+    assert logger.record(fast_ethernet, evaluate(fast_ethernet, 1000, 20), 1_700_000_000)
+    assert logger.record(gigabit_stuck, evaluate(gigabit_stuck, 1000, 20), 1_700_000_010)

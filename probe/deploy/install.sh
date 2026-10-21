@@ -18,7 +18,7 @@ if [ "$(id -u)" -ne 0 ]; then
 fi
 
 apt-get update
-apt-get install -y python3-pil python3-spidev python3-gpiozero python3-lgpio lldpd curl fonts-dejavu-core
+apt-get install -y python3-pil python3-spidev python3-gpiozero python3-lgpio lldpd ethtool curl fonts-dejavu-core
 
 raspi-config nonint do_spi 0
 systemctl enable --now lldpd
