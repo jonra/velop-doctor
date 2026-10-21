@@ -5,88 +5,127 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Velop Doctor</title>
 <style>
+/* GitHub Primer, light theme. Functional tokens from @primer/primitives (light). */
 :root{
-  --bg:#f6f7f9; --surface:#fff; --text:#16191d; --muted:#5d6672; --border:#dfe3e8;
-  --ok:#0f7b45; --ok-bg:#e4f4ec; --warn:#9a5b00; --warn-bg:#fdf1dc;
-  --crit:#b3261e; --crit-bg:#fbe7e5; --info:#2858c4; --info-bg:#e6edfb;
-  --accent:#2858c4; --shadow:0 1px 2px rgba(0,0,0,.06);
-}
-@media (prefers-color-scheme:dark){
-  :root:not([data-theme="light"]){
-    --bg:#101215; --surface:#181b20; --text:#e8eaed; --muted:#9aa3ae; --border:#2b3037;
-    --ok:#4cc38a; --ok-bg:#12261c; --warn:#e7a740; --warn-bg:#2a2112;
-    --crit:#ff7b72; --crit-bg:#2d1715; --info:#7ea6ff; --info-bg:#16203a;
-    --accent:#7ea6ff; --shadow:none;
-  }
-}
-:root[data-theme="dark"]{
-  --bg:#101215; --surface:#181b20; --text:#e8eaed; --muted:#9aa3ae; --border:#2b3037;
-  --ok:#4cc38a; --ok-bg:#12261c; --warn:#e7a740; --warn-bg:#2a2112;
-  --crit:#ff7b72; --crit-bg:#2d1715; --info:#7ea6ff; --info-bg:#16203a;
-  --accent:#7ea6ff; --shadow:none;
+  color-scheme:light;
+  --bg:#ffffff; --surface:#ffffff; --subtle:#f6f8fa; --hover:#eff2f5;
+  --text:#1f2328; --muted:#59636e; --faint:#818b98;
+  --border:#d1d9e0; --border-muted:#d8dee4;
+  --accent:#0969da; --accent-bg:#ddf4ff; --accent-border:#54aeff66;
+  --ok:#1a7f37; --ok-emph:#1f883d; --ok-bg:#dafbe1; --ok-border:#4ac26b66;
+  --warn:#9a6700; --warn-emph:#bf8700; --warn-bg:#fff8c5; --warn-border:#d4a72c66;
+  --crit:#d1242f; --crit-emph:#cf222e; --crit-bg:#ffebe9; --crit-border:#ff818266;
+  --neutral-emph:#59636e;
+  --font:-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans",Helvetica,Arial,sans-serif,"Apple Color Emoji","Segoe UI Emoji";
+  --mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,"Liberation Mono",monospace;
 }
 *{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--text);
-  font:15px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
-main{max-width:1100px;margin:0 auto;padding:16px}
-header{display:flex;flex-wrap:wrap;gap:12px;align-items:center;justify-content:space-between;margin-bottom:16px}
-h1{font-size:20px;margin:0;display:flex;gap:10px;align-items:center}
-h2{font-size:13px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin:0 0 10px}
-.card{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:16px;margin-bottom:16px;box-shadow:var(--shadow)}
+[hidden]{display:none!important}
+body{margin:0;background:var(--bg);color:var(--text);font:14px/1.5 var(--font)}
+main{max-width:1012px;margin:0 auto;padding:24px 16px}
+a{color:var(--accent)}
+header{background:var(--subtle);border-bottom:1px solid var(--border)}
+header .inner{max-width:1012px;margin:0 auto;padding:16px;display:flex;flex-wrap:wrap;gap:16px;
+  align-items:center;justify-content:space-between}
+h1{font-size:20px;font-weight:600;margin:0;display:flex;gap:8px;align-items:center}
+h1 svg{fill:var(--text)}
+h2{font-size:14px;font-weight:600;margin:0}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:16px;margin-bottom:16px}
+/* Primer "Box header": the first row or heading of a card becomes a tinted header bar */
+.card>h2,.card>.row:first-child{margin:-16px -16px 16px;padding:8px 16px;background:var(--subtle);
+  border-bottom:1px solid var(--border);border-radius:6px 6px 0 0;min-height:41px}
+.card>.row:first-child{align-items:center}
+.card>h2{display:flex;align-items:center}
 .row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
-.muted{color:var(--muted)} .small{font-size:13px}
-.pill{display:inline-flex;gap:6px;align-items:center;border-radius:999px;padding:3px 10px;font-size:13px;font-weight:600}
-.pill.ok{background:var(--ok-bg);color:var(--ok)} .pill.warning{background:var(--warn-bg);color:var(--warn)}
-.pill.critical{background:var(--crit-bg);color:var(--crit)} .pill.info,.pill.unknown{background:var(--info-bg);color:var(--info)}
-.demo{background:var(--warn-bg);color:var(--warn);border-radius:6px;padding:2px 8px;font-size:12px;font-weight:700}
-button{font:inherit;border:1px solid var(--border);background:var(--surface);color:var(--text);
-  border-radius:8px;padding:6px 12px;cursor:pointer}
-button:hover{border-color:var(--accent)} button.primary{background:var(--accent);color:#fff;border-color:var(--accent)}
-button.danger{border-color:var(--crit);color:var(--crit)} button:focus-visible,select:focus-visible,input:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
-button.small{padding:3px 8px;font-size:13px}
-.finding{display:flex;gap:12px;padding:10px 12px;border-radius:8px;margin-bottom:8px;border:1px solid var(--border)}
-.finding .ic{font-weight:800;width:20px;text-align:center}
-.finding.critical{background:var(--crit-bg);border-color:var(--crit)} .finding.critical .ic{color:var(--crit)}
-.finding.warning{background:var(--warn-bg);border-color:var(--warn)} .finding.warning .ic{color:var(--warn)}
-.finding.info{background:var(--info-bg)} .finding.info .ic{color:var(--info)}
-.finding b{display:block} .finding span{color:var(--muted);font-size:14px}
+.muted{color:var(--muted)} .small{font-size:12px}
+p{margin:0 0 12px}
+
+/* State label (Primer State): filled, pill-shaped */
+.pill{display:inline-flex;gap:4px;align-items:center;padding:0 12px;font-size:12px;font-weight:500;
+  line-height:24px;border-radius:2em;color:#fff;background:var(--neutral-emph)}
+.pill.ok{background:var(--ok-emph)} .pill.warning{background:var(--warn-emph)}
+.pill.critical{background:var(--crit-emph)} .pill.info{background:var(--accent)} .pill.unknown{background:var(--neutral-emph)}
+/* Label: outlined, pill-shaped */
+.tag{display:inline-block;font-size:12px;font-weight:500;line-height:18px;padding:0 7px;white-space:nowrap;
+  border:1px solid var(--border);color:var(--muted);border-radius:2em}
+.tag.good{border-color:var(--ok);color:var(--ok)} .tag.warn{border-color:var(--warn);color:var(--warn)}
+.tag.bad{border-color:var(--crit);color:var(--crit)}
+.demo{display:inline-block;font-size:12px;font-weight:500;line-height:18px;padding:0 7px;border-radius:2em;
+  border:1px solid var(--warn);color:var(--warn)}
+
+/* Buttons (Primer btn): default, primary (green), danger */
+button{font:inherit;font-size:14px;font-weight:500;line-height:20px;padding:3px 12px;color:var(--text);
+  background:var(--subtle);border:1px solid var(--border);border-radius:6px;cursor:pointer;
+  box-shadow:0 1px 0 rgba(31,35,40,.04);transition:background-color .1s}
+button:hover{background:var(--hover)}
+button.primary{background:var(--ok-emph);color:#fff;border-color:rgba(31,35,40,.15)}
+button.primary:hover{background:var(--ok)}
+button.primary.critical{background:var(--crit-emph)} button.primary.critical:hover{background:#a40e26}
+button.danger{color:var(--crit)}
+button.danger:hover{background:var(--crit-emph);color:#fff;border-color:rgba(31,35,40,.15)}
+button.small{padding:0 8px;font-size:12px;line-height:22px}
+button:disabled{opacity:.6;cursor:not-allowed}
+button:focus-visible,select:focus-visible,input:focus-visible,a:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+/* Flash: the problems list */
+.finding{display:flex;gap:12px;padding:12px 16px;border-radius:6px;margin-bottom:8px;border:1px solid var(--border)}
+.finding:last-child{margin-bottom:0}
+.finding .ic{font-weight:700;width:16px;text-align:center}
+.finding.critical{background:var(--crit-bg);border-color:var(--crit-border)} .finding.critical .ic{color:var(--crit)}
+.finding.warning{background:var(--warn-bg);border-color:var(--warn-border)} .finding.warning .ic{color:var(--warn)}
+.finding.info{background:var(--accent-bg);border-color:var(--accent-border)} .finding.info .ic{color:var(--accent)}
+.finding b{display:block;font-weight:600} .finding span{color:var(--text)} .finding em{color:var(--muted)}
 .allgood{color:var(--ok);font-weight:600}
+
+/* Tables */
 table{width:100%;border-collapse:collapse;font-size:14px}
-th{text-align:left;font-weight:600;color:var(--muted);font-size:12px;text-transform:uppercase;letter-spacing:.04em;padding:6px 8px;border-bottom:1px solid var(--border)}
-td{padding:7px 8px;border-bottom:1px solid var(--border);vertical-align:middle}
+th{text-align:left;font-weight:600;color:var(--muted);font-size:12px;padding:8px 12px;
+  background:var(--subtle);border-bottom:1px solid var(--border)}
+td{padding:8px 12px;border-bottom:1px solid var(--border-muted);vertical-align:middle}
 tr:last-child td{border-bottom:0}
-.tablewrap{overflow-x:auto}
-.bar{display:inline-block;width:54px;height:8px;border-radius:4px;background:var(--border);vertical-align:middle;margin-right:6px;overflow:hidden}
+tr:hover td{background:var(--subtle)}
+.tablewrap{overflow-x:auto;margin:0 -16px -16px}
+.bar{display:inline-block;width:54px;height:6px;border-radius:3px;background:var(--border-muted);
+  vertical-align:middle;margin-right:8px;overflow:hidden}
 .bar i{display:block;height:100%}
-.tag{font-size:12px;padding:1px 7px;border-radius:5px;background:var(--info-bg);color:var(--info);font-weight:600}
-.tag.bad{background:var(--crit-bg);color:var(--crit)} .tag.warn{background:var(--warn-bg);color:var(--warn)} .tag.good{background:var(--ok-bg);color:var(--ok)}
+
 svg text{font-family:inherit}
 #topo{width:100%;height:auto}
-.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:12px}
-.chart{border:1px solid var(--border);border-radius:8px;padding:8px 10px}
-.timeline li{display:flex;gap:10px;padding:5px 0;border-bottom:1px solid var(--border);font-size:14px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:16px}
+.chart{border:1px solid var(--border);border-radius:6px;padding:12px}
 .timeline{list-style:none;padding:0;margin:0}
-.timeline time{color:var(--muted);min-width:96px;font-variant-numeric:tabular-nums}
-input,select{font:inherit;border:1px solid var(--border);background:var(--surface);color:var(--text);border-radius:8px;padding:5px 8px}
-dialog{border:1px solid var(--border);border-radius:12px;background:var(--surface);color:var(--text);max-width:460px;width:calc(100% - 32px);padding:20px}
-dialog::backdrop{background:rgba(0,0,0,.5)}
-dialog ul{padding-left:18px;margin:10px 0}
-.toast{position:fixed;bottom:16px;left:50%;transform:translateX(-50%);background:var(--text);color:var(--bg);padding:8px 14px;border-radius:8px;font-size:14px;max-width:90%}
-@media (max-width:600px){main{padding:12px}.hide-sm{display:none}}
+.timeline li{display:flex;gap:12px;padding:8px 0;border-bottom:1px solid var(--border-muted);font-size:14px}
+.timeline li:last-child{border-bottom:0}
+.timeline time{color:var(--muted);min-width:104px;font-variant-numeric:tabular-nums}
+
+/* Form controls (Primer TextInput / Select) */
+input,select{font:inherit;color:var(--text);background:var(--surface);border:1px solid var(--border);
+  border-radius:6px;padding:5px 12px;min-height:32px;box-shadow:inset 0 1px 0 rgba(208,215,222,.2)}
+input:focus,select:focus{border-color:var(--accent);box-shadow:inset 0 0 0 1px var(--accent);outline:none}
+select{padding-right:8px}
+
+/* Dialog */
+dialog{border:1px solid var(--border);border-radius:12px;background:var(--surface);color:var(--text);
+  max-width:480px;width:calc(100% - 32px);padding:24px;box-shadow:0 0 0 1px var(--border),0 24px 48px rgba(31,35,40,.2)}
+dialog::backdrop{background:rgba(140,149,159,.2)}
+dialog h3{font-size:16px;font-weight:600;margin:0 0 8px}
+dialog ul{padding-left:20px;margin:12px 0}
+.toast{position:fixed;bottom:16px;left:50%;transform:translateX(-50%);background:var(--text);color:#fff;
+  padding:8px 16px;border-radius:6px;font-size:14px;max-width:90%;box-shadow:0 8px 24px rgba(31,35,40,.2)}
+@media (max-width:600px){main{padding:16px 12px}header .inner{padding:12px}.hide-sm{display:none}}
 </style>
 </head>
 <body>
-<main>
-<header>
-  <h1>Velop Doctor <span id="demo" class="demo" hidden>DEMO DATA</span></h1>
+<header><div class="inner">
+  <h1><svg viewBox="0 0 16 16" width="24" height="24" aria-hidden="true"><path d="M6 2c.306 0 .582.187.696.471L10 10.731l1.304-3.26A.751.751 0 0 1 12 7h3.25a.75.75 0 0 1 0 1.5h-2.742l-1.812 4.528a.751.751 0 0 1-1.392 0L6 4.77 4.696 8.03A.75.75 0 0 1 4 8.5H.75a.75.75 0 0 1 0-1.5h2.742l1.812-4.529A.751.751 0 0 1 6 2Z"/></svg>Velop Doctor <span id="demo" class="demo" hidden>DEMO DATA</span></h1>
   <div class="row">
     <span id="health" class="pill unknown">Loading…</span>
     <span id="updated" class="muted small"></span>
     <button id="refresh" class="small">Refresh now</button>
     <button id="pwBtn" class="small" hidden>Connection…</button>
-    <button id="theme" class="small" aria-label="Toggle dark mode">◐</button>
   </div>
-</header>
+</div></header>
+<main>
 
 <section id="welcome" class="card" hidden aria-labelledby="h-welcome">
   <h2 id="h-welcome">Welcome</h2>
@@ -149,15 +188,6 @@ const $ = id => document.getElementById(id);
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 let state = null, clientsSort = "dbm";
 
-try { const t = localStorage.getItem("theme"); if (t) document.documentElement.dataset.theme = t; } catch (e) {}
-$("theme").onclick = () => {
-  const dark = matchMedia("(prefers-color-scheme: dark)").matches;
-  const cur = document.documentElement.dataset.theme || (dark ? "dark" : "light");
-  const next = cur === "dark" ? "light" : "dark";
-  document.documentElement.dataset.theme = next;
-  try { localStorage.setItem("theme", next); } catch (e) {}
-};
-
 const ago = ts => { const s = Math.max(0, Math.round(Date.now()/1000 - ts));
   if (s < 90) return s + " s ago"; if (s < 5400) return Math.round(s/60) + " min ago";
   if (s < 172800) return Math.round(s/3600) + " h ago"; return Math.round(s/86400) + " d ago"; };
@@ -182,7 +212,7 @@ async function runAction(action, params) {
   $("dlgTitle").textContent = p.title;
   $("dlgEffects").innerHTML = p.effects.map(e => "<li>" + esc(e) + "</li>").join("");
   $("dlgRisk").textContent = "Risk: " + p.risk;
-  $("dlgOk").className = p.risk === "high" ? "danger" : "primary";
+  $("dlgOk").className = "primary" + (p.risk === "high" ? " critical" : "");
   const dlg = $("dlg");
   dlg.returnValue = "";
   dlg.onclose = async () => {
@@ -249,8 +279,8 @@ function renderTopo(snap, findings) {
       [n.ip + (n.rtt_ms != null ? " · " + n.rtt_ms.toFixed(0) + " ms" : ""),
        n.clients + " Wi-Fi device" + (n.clients === 1 ? "" : "s") + " · fw " + (n.firmware || "?")];
     return `<g transform="translate(${x - bw/2},${y})">
-      <rect width="${bw}" height="${bh}" rx="10" fill="var(--surface)" stroke="${COLOR[st]}" stroke-width="2" ${dashed ? 'stroke-dasharray="6 4"' : ""}/>
-      <rect width="8" height="${bh}" rx="4" fill="${COLOR[st]}"/>
+      <rect width="${bw}" height="${bh}" rx="6" fill="var(--surface)" stroke="${dashed ? COLOR[st] : "var(--border)"}" stroke-width="1" ${dashed ? 'stroke-dasharray="5 4"' : ""}/>
+      <rect width="6" height="${bh}" rx="3" fill="${COLOR[st]}"/>
       <text x="22" y="26" font-size="15" font-weight="700" fill="var(--text)">${esc(n.name.length > 24 ? n.name.slice(0,23) + "…" : n.name)}</text>
       <text x="22" y="48" font-size="12.5" fill="var(--muted)">${esc(lines[0])}</text>
       <text x="22" y="67" font-size="12.5" fill="var(--muted)">${esc(lines[1])}</text>

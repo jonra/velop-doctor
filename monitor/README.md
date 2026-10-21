@@ -13,6 +13,7 @@ Standard library only: nothing to install except Python 3.9+.
 - **Latency** charts for every node, your upstream router and the internet, plus 24-hour uptime per node.
 - **Timeline** of changes: nodes dropping out, backhaul switching to wireless, devices roaming, WAN address changes, gaps in monitoring.
 - **Actions** (always with a preview and a confirm step): turn client steering on or off, reboot a node.
+- **Claude can use it**: `velop-doctor mcp` is an MCP server with 12 tools (status, problems, nodes, devices, history, re-check now, ping from the computer and the router, DNS lookups, plus steering and reboot with preview-then-confirm). See [`../docs/mcp.md`](../docs/mcp.md).
 
 ## Install and run
 
@@ -32,6 +33,7 @@ Other commands:
 ```bash
 velop-doctor check                   # one-off report in the terminal; exit code 0 / 1 / 2 = ok / warnings / critical
 velop-doctor steering on             # change client steering from the terminal
+velop-doctor mcp --port 8765          # MCP server for Claude (stdio); needs the dashboard running
 velop-doctor install-service         # start the dashboard at login (launchd / systemd --user)
 velop-doctor uninstall-service
 ```
@@ -76,6 +78,8 @@ collector ──▶ snapshot (JSON) ──▶ analyzer ──▶ findings ──
   password**. A node that answers pings but rejects the password is not following
   the main node's settings. That is how a half-added node gives itself away.
 - `analyzer.py` is pure functions over snapshots, so it is easy to test.
+- `mcp_server.py` and `mcp_tools.py` are the MCP server: a small standard-library JSON-RPC layer over stdio, and the tools, which call the dashboard's local API.
+- `diagnostics.py` validates and runs the on-demand ping and DNS lookups.
 - `probes.py` holds the active probes (ping with jitter, DNS, TCP, MTU, router-side ping, DHCP, host Wi-Fi), each of which gives up quickly and never raises.
 - `store.py` only reports a finding after it has persisted for its `min_seconds`,
   and restarts that clock after a gap in monitoring (a sleeping laptop is not an hour of outage).

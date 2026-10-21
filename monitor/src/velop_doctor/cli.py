@@ -157,6 +157,17 @@ def cmd_steering(args):
     return 0 if result["ok"] else 1
 
 
+def cmd_mcp(args):
+    """Serve MCP over stdio for Claude. Talks to the running dashboard; prints nothing else to stdout."""
+    import os
+    from .mcp_tools import Dashboard, build_server
+    cfg = config.load()
+    url = args.url or os.environ.get("VELOP_DOCTOR_URL") or f"http://127.0.0.1:{args.port or cfg.port}"
+    read_only = args.read_only or os.environ.get("VELOP_DOCTOR_MCP_READONLY") == "1"
+    build_server(Dashboard(url), read_only=read_only).serve_stdio()
+    return 0
+
+
 def cmd_install(args):
     return service.install(args.port)
 
@@ -188,6 +199,12 @@ def main(argv=None):
     s.add_argument("state", choices=["on", "off"])
     s.add_argument("-y", "--yes", action="store_true", help="skip the confirmation")
     s.set_defaults(func=cmd_steering)
+
+    s = sub.add_parser("mcp", help="MCP server for Claude (stdio); needs the dashboard to be running")
+    s.add_argument("--port", type=int, help="port of the running dashboard (default: from config, 8765)")
+    s.add_argument("--url", help="full dashboard URL, overrides --port")
+    s.add_argument("--read-only", action="store_true", help="do not offer the steering and reboot tools")
+    s.set_defaults(func=cmd_mcp)
 
     s = sub.add_parser("install-service", help="start the dashboard automatically at login")
     s.add_argument("--port", type=int, default=8765)

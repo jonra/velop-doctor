@@ -11,7 +11,7 @@ or what happened while you were not looking. This repo does.
 |---|---|
 | [`monitor/`](monitor) | A Python dashboard (no dependencies) that polls your Velop every minute, keeps history, and runs checks: nodes offline or out of sync, stale "ghost" nodes, wireless backhaul, slow wired links, idle nodes, weak devices, double NAT, internet drops. |
 | [`probe/`](probe) (**ethtester**) | A Raspberry Pi Zero with a USB Ethernet dongle and an e-ink screen. Plug it into any wall socket or switch port and it shows how far the connection gets (link speed and flaps, which switch port you reached, DHCP, gateway, DNS, internet) and what is most likely at fault. Own README, installer and systemd service. |
-| [`docs/`](docs) | What each check means, and notes on the (unofficial) JNAP API the Velop speaks. |
+| [`docs/`](docs) | What each check means, how to use the monitor from Claude over MCP, and notes on the (unofficial) JNAP API the Velop speaks. |
 
 The two parts are independent. Use either, or both: the monitor tells you what the mesh
 thinks, the probe tells you what the cable actually does.

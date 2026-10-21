@@ -12,6 +12,7 @@ from urllib.parse import parse_qs, urlparse
 
 from . import __version__, config
 from .actions import ActionError
+from .diagnostics import DiagnosticError
 from .jnap import AuthError, JnapClient, JnapError
 
 INDEX = Path(__file__).parent / "web" / "index.html"
@@ -26,6 +27,7 @@ class App:
         self.token = secrets.token_urlsafe(24)
         self.allowed_hosts = {"localhost", "127.0.0.1", "[::1]", host}
         self.action_lock = threading.Lock()
+        self.diagnose_lock = threading.Lock()
         self.client, self.guess = client, guess
         self.make_backend = make_backend
 
@@ -90,6 +92,21 @@ class App:
         self.attach((self.make_backend or LiveBackend)(self.cfg, password))
         return 200, {"ok": True, "message": f"Connected. Password stored in {where}."}
 
+    def handle_diagnose(self, body):
+        """Run a validated ping or DNS lookup. One at a time: they can take half a minute."""
+        if not self.configured:
+            return 400, {"ok": False, "message": "Connect to your Velop first."}
+        if not self.diagnose_lock.acquire(blocking=False):
+            return 429, {"ok": False, "message": "Another diagnostic is still running; try again shortly."}
+        try:
+            result = self.backend.diagnose(body.get("tool"), body.get("params") or {},
+                                           self.store.latest_snapshot())
+            return 200, {"ok": True, "result": result}
+        except DiagnosticError as e:
+            return 400, {"ok": False, "message": str(e)}
+        finally:
+            self.diagnose_lock.release()
+
     def handle_action(self, body):
         if not self.configured:
             return 400, {"ok": False, "message": "Connect to your Velop first."}
@@ -148,6 +165,10 @@ def make_handler(app):
             if url.path == "/":
                 html = INDEX.read_text().replace("__TOKEN__", app.token)
                 return self._send(200, html.encode(), "text/html; charset=utf-8")
+            if url.path == "/api/token":
+                # Same exposure as the page itself (which embeds the token): browsers on other
+                # origins cannot read it, and the Host check blocks DNS rebinding.
+                return self._send(200, {"token": app.token})
             if url.path == "/api/state":
                 return self._send(200, app.state())
             if url.path == "/api/events":
@@ -168,14 +189,15 @@ def make_handler(app):
             if self.headers.get("X-Velop-Token") != app.token:
                 return self._send(403, {"error": "missing or wrong token"})
             path = urlparse(self.path).path
-            if path not in ("/api/actions", "/api/setup"):
+            if path not in ("/api/actions", "/api/setup", "/api/diagnose"):
                 return self._send(404, {"error": "not found"})
             try:
                 length = int(self.headers.get("Content-Length") or 0)
                 body = json.loads(self.rfile.read(min(length, 65536)) or b"{}")
             except ValueError:
                 return self._send(400, {"error": "invalid json"})
-            status, payload = app.setup(body) if path == "/api/setup" else app.handle_action(body)
+            handler = {"/api/setup": app.setup, "/api/diagnose": app.handle_diagnose}.get(path, app.handle_action)
+            status, payload = handler(body)
             self._send(status, payload)
 
     return Handler

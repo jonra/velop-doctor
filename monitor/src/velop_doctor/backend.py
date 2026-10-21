@@ -1,7 +1,7 @@
 """Backends the server talks to: a real Velop, or synthetic demo data."""
 from __future__ import annotations
 
-from . import actions
+from . import actions, diagnostics, probes
 from .collector import collect
 from .demo import make_snapshot
 from .jnap import JnapClient
@@ -26,6 +26,12 @@ class LiveBackend:
     def execute(self, action, params, snap):
         return actions.execute(action, params, snap, self._client, self.cfg)
 
+    def diagnose(self, tool, params, snap):
+        return diagnostics.diagnose(
+            tool, params, snap,
+            router_ping=lambda host, count: probes.router_ping(
+                self._client(self.cfg.primary), host, count=count, wait=count + 8))
+
 
 class DemoBackend:
     """Synthetic mesh with deliberate problems, for screenshots and trying the UI."""
@@ -42,6 +48,13 @@ class DemoBackend:
 
     def preview(self, action, params, snap):
         return actions.preview(action, params, snap)
+
+    def diagnose(self, tool, params, snap):
+        return diagnostics.diagnose(
+            tool, params, snap,
+            pinger=lambda host, count=5: (0.0, 12.0, 1.5),
+            router_ping=lambda host, count: {"target": host, "loss": 0.0, "rtt_ms": 9.0},
+            dns_probe=lambda server, name: {"ok": True, "ms": 18.0})
 
     def execute(self, action, params, snap):
         if action in ("steering_on", "steering_off"):

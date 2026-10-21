@@ -13,6 +13,13 @@ PYTHONPATH=src:tests python3 -m unittest discover -s tests -v
 No third-party packages are needed, and none should be added to `monitor/`
 without a strong reason: easy installation is a feature.
 
+## MCP server
+
+`monitor/tests/test_mcp.py` covers the protocol layer and every tool against a real dashboard server
+(demo data). To check against the official SDK client, see `monitor/scripts/mcp_sdk_check.py`. A new tool
+needs a schema with `additionalProperties: false`, honest `readOnlyHint`/`destructiveHint` annotations, and,
+if it changes anything, the preview-then-`confirm` flow.
+
 ## The probe
 
 ```bash
