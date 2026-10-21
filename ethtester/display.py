@@ -45,15 +45,25 @@ class PngBackend:
 
 
 class WaveshareBackend:
-    def __init__(self, epd):
+    """release() runs before every re-init: epd.init() opens SPI again without closing it."""
+
+    def __init__(self, epd, release=None):
         self.epd = epd
-        self.epd.init()
+        self.release = release
+        self._initialised = False
+        self._init()
         self.epd.Clear(0xFF)
+
+    def _init(self) -> None:
+        if self._initialised and self.release is not None:
+            self.release()
+        self.epd.init()
+        self._initialised = True
 
     def show(self, image, full: bool) -> None:
         buf = self.epd.getbuffer(image)
         if full:
-            self.epd.init()
+            self._init()
             self.epd.displayPartBaseImage(buf)
         else:
             self.epd.displayPartial(buf)
@@ -66,4 +76,4 @@ def make_backend(cfg: Config):
         from .vendor.waveshare_epd import epd2in13_V3 as driver
     else:
         from .vendor.waveshare_epd import epd2in13_V4 as driver
-    return WaveshareBackend(driver.EPD())
+    return WaveshareBackend(driver.EPD(), release=driver.epdconfig.module_exit)

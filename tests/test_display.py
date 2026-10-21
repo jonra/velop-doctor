@@ -64,10 +64,24 @@ class FakeEPD:
 
 def test_waveshare_backend_sequence():
     epd = FakeEPD()
-    backend = WaveshareBackend(epd)
+    backend = WaveshareBackend(epd, release=lambda: epd.calls.append("release"))
     backend.show(img(255), full=True)
     backend.show(img(255), full=False)
-    assert epd.calls == ["init", "Clear(0xff)", "init", "base", "partial"]
+    backend.show(img(0), full=True)
+    assert epd.calls == ["init", "Clear(0xff)", "release", "init", "base", "partial",
+                         "release", "init", "base"]
+
+
+def test_waveshare_backend_every_later_init_follows_one_release():
+    epd = FakeEPD()
+    backend = WaveshareBackend(epd, release=lambda: epd.calls.append("release"))
+    for full in (True, True, False, True):
+        backend.show(img(255), full=full)
+    inits = [i for i, call in enumerate(epd.calls) if call == "init"]
+    assert epd.calls[:inits[0]].count("release") == 0
+    for before, after in zip(inits, inits[1:]):
+        assert epd.calls[before:after].count("release") == 1
+        assert epd.calls[after - 1] == "release"
 
 
 def test_make_backend_png(tmp_path: Path):
