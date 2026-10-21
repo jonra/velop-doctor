@@ -21,6 +21,8 @@ A Pi Zero with a USB Ethernet dongle and a Waveshare 2.13" e-ink HAT. Plug it in
 4. In `/boot/firmware/ethtester.toml`, check that `display` matches the sticker on the back of the HAT (default `"V4"`). If your dongle is a 10/100 model, also set `expected_speed = 100`.
 5. Reboot.
 
+To update, or after changing `interface` in the config, copy the folder over again and re-run `install.sh`; it updates the network profile and restarts the service, so no reboot is needed.
+
 Logs: `journalctl -u ethtester` for errors, and `/var/log/ethtester/ethtester.log` for the state history.
 
 Limitations: it can't measure PoE (use an inline PoE tester). LLDP needs a managed switch.

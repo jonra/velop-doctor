@@ -111,10 +111,10 @@ internet_url   = "https://1.1.1.1/cdn-cgi/trace"
 
 ## Deployment
 
-- Raspberry Pi OS Lite (Bookworm). Packages: `python3-pil`, `python3-spidev`, `python3-gpiozero`, `lldpd`, `curl`. SPI enabled.
-- Waveshare driver files for V3 and V4 are vendored into the project.
-- A systemd unit `ethtester.service` (`Restart=always`, after `NetworkManager.service`).
-- An `install.sh` script installs the packages, enables SPI and lldpd, copies the code to `/opt/ethtester`, installs the unit, and writes a default config if none exists.
+- Raspberry Pi OS Lite (Bookworm or Trixie). Packages: `python3-pil`, `python3-spidev`, `python3-gpiozero`, `lldpd`, `curl`. SPI enabled.
+- Waveshare driver files for V3 and V4 are vendored into the project. The only local change is a 10 s timeout on the BUSY-pin wait, so a stuck panel raises instead of hanging.
+- A systemd unit `ethtester.service` (`Restart=always`, after `NetworkManager.service`) with a watchdog (`WatchdogSec=120`, `NotifyAccess=main`): the main loop sends `WATCHDOG=1` once per tick, so systemd restarts the service if the loop hangs.
+- An `install.sh` script installs the packages, enables SPI and lldpd, creates or updates the `ethtester` NetworkManager profile for the interface (argument, else `interface` from the config, else `eth0`), copies the code to `/opt/ethtester`, installs the unit, writes a default config if none exists, and restarts the service if it is already running.
 
 ## Testing
 
