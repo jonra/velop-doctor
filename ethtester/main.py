@@ -8,7 +8,7 @@ from pathlib import Path
 from . import __version__, watchdog
 from .collector import Collector
 from .config import DEFAULT_CONFIG_PATH, Config, load_config
-from .display import Display, make_backend
+from .display import Display, PngBackend, make_backend
 from .render import build_rows, render, render_message
 from .statelog import StateLogger
 from .verdict import evaluate
@@ -17,6 +17,7 @@ log = logging.getLogger("ethtester")
 
 FAST_INTERVAL = 0.5
 FAST_CODES = ("NO_LINK", "WAIT_DHCP")
+CONFIG_ERROR_S = 15
 
 
 def run(cfg: Config, collector, display: Display, statelog: StateLogger,
@@ -43,14 +44,41 @@ def run(cfg: Config, collector, display: Display, statelog: StateLogger,
         sleep(delay)
 
 
+def start(cfg_path: Path, sleep=time.sleep, backend_factory=make_backend) -> tuple[Config, Display]:
+    """Loads the config and opens the display, falling back so the loop always gets to run."""
+    error = None
+    try:
+        cfg = load_config(cfg_path)
+    except (ValueError, OSError) as exc:
+        log.error("config %s unusable, using defaults: %s", cfg_path, exc)
+        cfg, error = Config(), str(exc).splitlines()[0]
+    log.info("ethtester %s starting with %s", __version__, cfg)
+
+    try:
+        backend = backend_factory(cfg)
+    except Exception:
+        log.exception("display init failed, writing PNG to %s instead", cfg.png_path)
+        backend = PngBackend(Path(cfg.png_path))
+    display = Display(backend)
+
+    if error is None:
+        title, subtitle, code = "ethtester", f"waiting for link  v{__version__}", "STARTUP"
+    else:
+        title, subtitle, code = "CONFIG ERROR", error, "CONFIG_ERROR"
+    try:
+        display.update(render_message(title, subtitle), code)
+    except Exception:
+        log.exception("startup screen failed")
+    if error is not None:
+        sleep(CONFIG_ERROR_S)
+    return cfg, display
+
+
 def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(prog="ethtester")
     parser.add_argument("--config", type=Path, default=DEFAULT_CONFIG_PATH)
     args = parser.parse_args(argv)
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
 
-    cfg = load_config(args.config)
-    log.info("ethtester %s starting with %s", __version__, cfg)
-    display = Display(make_backend(cfg))
-    display.update(render_message("ethtester", f"waiting for link  v{__version__}"), "STARTUP")
+    cfg, display = start(args.config)
     run(cfg, Collector(cfg), display, StateLogger(Path(cfg.log_path)))
