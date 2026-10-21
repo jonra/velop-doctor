@@ -1,8 +1,15 @@
 #!/usr/bin/env bash
 # Installs ethtester on Raspberry Pi OS Lite (Bookworm or Trixie). Usage: sudo deploy/install.sh [interface]
+# The interface defaults to the one in /boot/firmware/ethtester.toml, then eth0.
 set -euo pipefail
 
-IFACE="${1:-eth0}"
+CONFIG=/boot/firmware/ethtester.toml
+IFACE="${1:-}"
+if [ -z "$IFACE" ] && [ -f "$CONFIG" ]; then
+  IFACE="$(sed -n 's/^interface *= *"\(.*\)".*/\1/p' "$CONFIG")"
+  IFACE="${IFACE%%$'\n'*}"
+fi
+IFACE="${IFACE:-eth0}"
 SRC="$(cd "$(dirname "$0")/.." && pwd)"
 
 if [ "$(id -u)" -ne 0 ]; then
@@ -27,8 +34,8 @@ rm -rf /opt/ethtester/ethtester
 cp -r "$SRC/ethtester" /opt/ethtester/
 find /opt/ethtester -name __pycache__ -prune -exec rm -rf {} +
 
-if [ ! -f /boot/firmware/ethtester.toml ]; then
-  cp "$SRC/deploy/ethtester.toml" /boot/firmware/ethtester.toml
+if [ ! -f "$CONFIG" ]; then
+  cp "$SRC/deploy/ethtester.toml" "$CONFIG"
 fi
 
 cp "$SRC/deploy/ethtester.service" /etc/systemd/system/ethtester.service
