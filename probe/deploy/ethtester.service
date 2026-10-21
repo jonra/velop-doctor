@@ -1,0 +1,15 @@
+[Unit]
+Description=Ethernet tester with e-ink display
+After=NetworkManager.service lldpd.service
+Wants=lldpd.service
+
+[Service]
+WorkingDirectory=/opt/ethtester
+ExecStart=/usr/bin/python3 -m ethtester --config /boot/firmware/ethtester.toml
+Restart=always
+RestartSec=3
+WatchdogSec=120
+NotifyAccess=main
+
+[Install]
+WantedBy=multi-user.target
