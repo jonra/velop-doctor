@@ -1,0 +1,9 @@
+# ethtester settings. Edit from any computer by opening the SD card's boot partition.
+interface      = "eth0"
+display        = "V4"         # "V3" or "V4": check the sticker on the back of the HAT
+expected_speed = 1000         # Mbps; use 100 for a 10/100 USB dongle
+interval       = 5            # seconds between checks once connected
+dhcp_timeout   = 20           # seconds before "NO DHCP"
+ping_count     = 3
+dns_test_name  = "example.com"
+internet_url   = "https://1.1.1.1/cdn-cgi/trace"
