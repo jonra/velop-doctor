@@ -28,12 +28,14 @@ def run(cfg: Config, collector, display: Display, statelog: StateLogger,
         try:
             snapshot = collector.collect()
             verdict = evaluate(snapshot, cfg.expected_speed, cfg.dhcp_timeout)
+            delay = FAST_INTERVAL if verdict.code in FAST_CODES else cfg.interval
             now = wall()
-            statelog.record(snapshot, verdict, now)
+            try:
+                statelog.record(snapshot, verdict, now)
+            except Exception:
+                log.exception("state log failed")
             clock_text = time.strftime("%H:%M", time.localtime(now))
             display.update(render(build_rows(snapshot, verdict), verdict, clock_text), verdict.code)
-            if verdict.code in FAST_CODES:
-                delay = FAST_INTERVAL
         except Exception:
             log.exception("tick failed")
         sleep(delay)
