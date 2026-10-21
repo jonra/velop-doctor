@@ -91,6 +91,10 @@ tr:hover td{background:var(--subtle)}
 
 svg text{font-family:inherit}
 #topo{width:100%;height:auto}
+.dot{cursor:pointer} .dot:hover .shape{stroke:var(--text);stroke-width:2;fill-opacity:1}
+.legend{gap:16px;margin-top:8px} .legend span{display:inline-flex;align-items:center}
+.sw{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:6px}
+.sw.sq{border-radius:2px}
 .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:16px}
 .chart{border:1px solid var(--border);border-radius:6px;padding:12px}
 .timeline{list-style:none;padding:0;margin:0}
@@ -141,7 +145,18 @@ dialog ul{padding-left:20px;margin:12px 0}
 <section class="card" aria-labelledby="h-topo">
   <div class="row" style="justify-content:space-between"><h2 id="h-topo">Network map</h2>
     <div class="row small muted"><span id="steer"></span><button id="steerBtn" class="small"></button></div></div>
-  <svg id="topo" role="img" aria-label="Mesh topology diagram"></svg>
+  <svg id="topo" role="img" aria-label="Mesh topology diagram: internet, router, nodes and the devices on each"></svg>
+  <div class="row small muted legend">
+    <span><b>Device signal</b>&nbsp;(last reported)</span>
+    <span><i class="sw" style="background:var(--ok-emph)"></i>-60 dBm or better</span>
+    <span><i class="sw" style="background:#4ac26b"></i>-60 to -70</span>
+    <span><i class="sw" style="background:var(--warn-emph)"></i>-70 to -80</span>
+    <span><i class="sw" style="background:var(--crit-emph)"></i>-80 or worse</span>
+    <span><i class="sw sq" style="background:var(--faint)"></i>wired</span>
+    <span><i class="sw" style="background:var(--faint);opacity:.4"></i>reading over 2 h old</span>
+    <span>Hover for details, click to find it in the table</span>
+  </div>
+  <p id="topoNote" class="muted small" style="margin:8px 0 0"></p>
 </section>
 
 <section class="card" aria-labelledby="h-nodes"><h2 id="h-nodes">Nodes</h2>
@@ -264,54 +279,168 @@ function nodeState(n, findings) {
 }
 const COLOR = {ok:"var(--ok)", warning:"var(--warn)", critical:"var(--crit)"};
 
+/* ---- topology: internet -> upstream router -> main node -> satellites, with every device drawn on its node ---- */
+const SIGNAL_COLORS = {strong: "var(--ok-emph)", good: "#4ac26b", fair: "var(--warn-emph)", weak: "var(--crit-emph)", none: "var(--faint)"};
+function signalClass(dbm) {
+  if (dbm == null) return "none";
+  return dbm >= -60 ? "strong" : dbm >= -70 ? "good" : dbm > -80 ? "fair" : "weak";
+}
+
+function deviceDot(c, x, y) {
+  const wired = c.kind === "wired", stale = c.age_s != null && c.age_s > 7200;
+  const col = SIGNAL_COLORS[signalClass(wired ? null : c.dbm)];
+  const where = wired ? "wired" : `${c.band || "Wi-Fi"} ${c.dbm != null ? c.dbm + " dBm" : "no signal data"}`;
+  const tip = `${c.name} · ${where}${!wired && stale ? " (reported " + dur(c.age_s) + " ago)" : ""}${c.mbps ? " · " + c.mbps + " Mbps" : ""}${c.ip ? " · " + c.ip : ""}`;
+  const shape = wired
+    ? `<rect class="shape" x="${x - 5}" y="${y - 5}" width="10" height="10" rx="2" fill="${col}"/>`
+    : `<circle class="shape" cx="${x}" cy="${y}" r="6" fill="${col}" fill-opacity="${stale ? .4 : 1}" stroke="${stale ? col : "none"}" stroke-width="1.5"/>`;
+  return `<g class="dot" data-name="${esc(c.name)}"><title>${esc(tip)}</title>${shape}<circle cx="${x}" cy="${y}" r="9" fill="transparent"/></g>`;
+}
+
+function groupDevices(list) {
+  const rank = b => b === "5GHz" ? 0 : b === "2.4GHz" ? 1 : 2;
+  const wifi = list.filter(c => c.kind === "wireless"), wired = list.filter(c => c.kind === "wired");
+  const bands = [...new Set(wifi.map(c => c.band || "Wi-Fi"))].sort((a, b) => rank(a) - rank(b) || a.localeCompare(b));
+  const weakFirst = (a, b) => (a.dbm ?? 0) - (b.dbm ?? 0);
+  return bands.map(b => ({label: b.replace("GHz", " GHz"), list: wifi.filter(c => (c.band || "Wi-Fi") === b).sort(weakFirst)}))
+    .concat(wired.length ? [{label: "Wired", list: wired}] : []);
+}
+
+/* A tray holds a node's devices as dots, grouped by band. Returns its svg and height. */
+function deviceTray(x, y, w, list, emptyText, align = "left") {
+  const PITCH = 16;
+  if (list.length) {  // shrink to fit, staying on the side facing its node
+    const widest = Math.max(...groupDevices(list).map(g => g.list.length));
+    const fit = Math.min(w, Math.max(150, 28 + widest * PITCH));
+    x = align === "right" ? x + w - fit : align === "center" ? x + (w - fit) / 2 : x;
+    w = fit;
+  }
+  if (!list.length) {
+    return {h: 34, x, w, svg: `<rect x="${x}" y="${y}" width="${w}" height="34" rx="6" fill="none" stroke="var(--border)" stroke-dasharray="5 4"/>
+      <text x="${x + w / 2}" y="${y + 21}" text-anchor="middle" font-size="12" fill="var(--muted)">${esc(emptyText)}</text>`};
+  }
+  const cols = Math.max(1, Math.floor((w - 24) / PITCH));
+  let yy = y + 30, body = "";
+  for (const g of groupDevices(list)) {
+    body += `<text x="${x + 12}" y="${yy + 2}" font-size="11" fill="var(--muted)">${esc(g.label)} · ${g.list.length}</text>`;
+    yy += 12;
+    g.list.forEach((c, i) => body += deviceDot(c, x + 20 + (i % cols) * PITCH, yy + 8 + Math.floor(i / cols) * PITCH));
+    yy += Math.ceil(g.list.length / cols) * PITCH + 8;
+  }
+  const h = yy - y;
+  return {h, x, w, svg: `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="6" fill="var(--subtle)" stroke="var(--border)"/>
+    <text x="${x + 12}" y="${y + 19}" font-size="12" font-weight="600" fill="var(--text)">${list.length} device${list.length === 1 ? "" : "s"}</text>${body}`};
+}
+
 function renderTopo(snap, findings) {
-  const W = 960, bw = 220, bh = 84;
+  const W = 960, cx = W / 2, BH = 84;
   const main = snap.nodes.find(n => n.role === "primary");
   const kids = snap.nodes.filter(n => n.role !== "primary" && n.in_mesh);
   const ghosts = snap.nodes.filter(n => n.role !== "primary" && !n.in_mesh);
+  const byNode = {};
+  snap.clients.forEach(c => (byNode[c.node_id] = byNode[c.node_id] || []).push(c));
+  const unplaced = snap.clients.filter(c => !snap.nodes.some(n => n.id === c.node_id)).length;
   const hasUp = !!snap.upstream;
-  const yI = 22, yU = 92, yM = hasUp ? 168 : 110, yK = yM + 150;
-  const H = yK + bh + 24, cx = W/2;
+  const inetDown = snap.internet.length > 0 && snap.internet.every(i => i.loss >= 100);
+  const line = inetDown ? "var(--crit-emph)" : "var(--border)";
+  const yCloud = 30, yUp = 98, yM = hasUp ? 166 : 104;
   let g = "";
-  const box = (n, x, y, dashed) => {
-    const st = dashed ? "warning" : nodeState(n, findings);
-    const lines = dashed ? ["Registered, not in the mesh", n.ip || ""] :
-      [n.ip + (n.rtt_ms != null ? " · " + n.rtt_ms.toFixed(0) + " ms" : ""),
-       n.clients + " Wi-Fi device" + (n.clients === 1 ? "" : "s") + " · fw " + (n.firmware || "?")];
-    return `<g transform="translate(${x - bw/2},${y})">
-      <rect width="${bw}" height="${bh}" rx="6" fill="var(--surface)" stroke="${dashed ? COLOR[st] : "var(--border)"}" stroke-width="1" ${dashed ? 'stroke-dasharray="5 4"' : ""}/>
-      <rect width="6" height="${bh}" rx="3" fill="${COLOR[st]}"/>
-      <text x="22" y="26" font-size="15" font-weight="700" fill="var(--text)">${esc(n.name.length > 24 ? n.name.slice(0,23) + "…" : n.name)}</text>
-      <text x="22" y="48" font-size="12.5" fill="var(--muted)">${esc(lines[0])}</text>
-      <text x="22" y="67" font-size="12.5" fill="var(--muted)">${esc(lines[1])}</text>
-      <text x="${bw - 14}" y="24" font-size="16" font-weight="800" text-anchor="end" fill="${COLOR[st]}">${ICON[st]}</text></g>`;
+
+  const nodeBox = (n, x, y, w, dashed) => {
+    const st = dashed ? "warning" : nodeState(n, findings), col = COLOR[st];
+    const mine = byNode[n.id] || [];
+    const wifi = mine.filter(c => c.kind === "wireless").length, wired = mine.length - wifi;
+    const l2 = dashed ? "Registered, not in the mesh" : `${n.ip || "no address"}${n.rtt_ms != null ? " · " + n.rtt_ms.toFixed(0) + " ms" : ""}`;
+    const l3 = dashed ? (n.ip || "") : `${wifi} Wi-Fi · ${wired} wired`;
+    const name = n.name.length > 20 ? n.name.slice(0, 19) + "…" : n.name;
+    return `<g transform="translate(${x - w / 2},${y})">
+      <rect width="${w}" height="${BH}" rx="6" fill="var(--surface)" stroke="${dashed ? col : "var(--border)"}" ${dashed ? 'stroke-dasharray="5 4"' : ""}/>
+      <rect width="6" height="${BH}" rx="3" fill="${col}"/>
+      <rect x="20" y="20" width="18" height="46" rx="5" fill="var(--subtle)" stroke="var(--border)"/>
+      <circle cx="29" cy="31" r="3" fill="${col}"/>
+      <path d="M24 42h10M24 47h10M24 52h10M24 57h10" stroke="var(--border)" stroke-width="1.5" stroke-linecap="round"/>
+      <text x="50" y="27" font-size="14" font-weight="600" fill="var(--text)">${esc(name)}</text>
+      <text x="50" y="47" font-size="12" fill="var(--muted)">${esc(l2)}</text>
+      <text x="50" y="66" font-size="12" fill="var(--muted)">${esc(l3)}</text>
+      <text x="${w - 14}" y="24" font-size="15" font-weight="700" text-anchor="end" fill="${col}">${ICON[st]}</text></g>`;
   };
-  g += `<text x="${cx}" y="${yI + 5}" text-anchor="middle" font-size="14" font-weight="700" fill="var(--muted)">Internet ${inetLabel(snap)}</text>`;
-  g += `<line x1="${cx}" y1="${yI + 12}" x2="${cx}" y2="${hasUp ? yU : yM}" stroke="var(--border)" stroke-width="3"/>`;
+
+  // internet and the upstream router
+  g += `<g transform="translate(${cx - 118},${yCloud - 13})"><path d="M7 24a5.5 5.5 0 0 1-.6-10.96A8 8 0 0 1 21.7 10.2 6 6 0 0 1 22.5 24Z" fill="var(--accent-bg)" stroke="var(--accent)" stroke-width="1.5" transform="scale(1.05)"/></g>
+    <text x="${cx - 76}" y="${yCloud + 5}" font-size="14" font-weight="600" fill="var(--text)">Internet ${inetLabel(snap)}</text>`;
+  g += `<line x1="${cx}" y1="${yCloud + 18}" x2="${cx}" y2="${hasUp ? yUp - 4 : yM}" stroke="${line}" stroke-width="3"/>`;
   if (hasUp) {
-    g += `<text x="${cx}" y="${yU + 18}" text-anchor="middle" font-size="13" fill="var(--muted)">Upstream router ${esc(snap.upstream.target)}${snap.upstream.rtt_ms != null ? " · " + snap.upstream.rtt_ms.toFixed(0) + " ms" : ""}${snap.wan.double_nat ? " · double NAT" : ""}</text>`;
-    g += `<line x1="${cx}" y1="${yU + 26}" x2="${cx}" y2="${yM}" stroke="var(--border)" stroke-width="3"/>`;
+    const u = snap.upstream;
+    g += `<g transform="translate(${cx - 250},${yUp - 10})"><rect x="0" y="6" width="38" height="14" rx="3" fill="var(--subtle)" stroke="var(--border)"/>
+        <path d="M8 6V0M30 6V0" stroke="var(--muted)" stroke-width="2" stroke-linecap="round"/>
+        <circle cx="9" cy="13" r="1.8" fill="var(--ok-emph)"/><circle cx="15" cy="13" r="1.8" fill="var(--ok-emph)"/></g>
+      <text x="${cx - 204}" y="${yUp + 6}" font-size="13" fill="var(--text)">Upstream router ${esc(u.target)}${u.rtt_ms != null ? " · " + u.rtt_ms.toFixed(0) + " ms" : ""}</text>`;
+    if (snap.wan.double_nat) g += `<rect x="${cx + 48}" y="${yUp - 8}" width="78" height="20" rx="10" fill="none" stroke="var(--warn)"/>
+      <text x="${cx + 87}" y="${yUp + 6}" font-size="11" font-weight="500" text-anchor="middle" fill="var(--warn)">double NAT</text>`;
+    g += `<line x1="${cx}" y1="${yUp + 16}" x2="${cx}" y2="${yM}" stroke="${line}" stroke-width="3"/>`;
   }
-  if (main) g += box(main, cx, yM, false);
-  const place = (i, n) => W * (i + 1) / (n + 1);
-  const pos = {};
-  kids.forEach((k, i) => pos[k.id] = place(i, kids.length + ghosts.length));
-  kids.forEach(k => {
-    const x = pos[k.id], bh_ = k.backhaul || {};
-    const wired = bh_.type === "Wired";
-    const label = wired ? (bh_.mbps ? (bh_.mbps >= 1000 ? Math.round(bh_.mbps/1000) + " Gbps" : bh_.mbps + " Mbps") + " wired" : "wired")
-                        : "wireless" + (bh_.rssi ? " " + bh_.rssi + " dBm" : "") + (bh_.mbps ? " · " + bh_.mbps + " Mbps" : "");
-    const slow = wired && bh_.mbps && bh_.mbps < 1000;
-    const stroke = slow ? "var(--warn)" : "var(--accent)";
-    g += `<path d="M ${cx} ${yM + bh} C ${cx} ${yK - 50}, ${x} ${yM + bh + 50}, ${x} ${yK}" fill="none" stroke="${stroke}" stroke-width="${wired ? 3 : 2}" ${wired ? "" : 'stroke-dasharray="7 5"'}/>`;
-    const lx = cx + (x - cx) * 0.62, ly = yM + bh + (yK - yM - bh) * 0.55; // near the child end so labels never overlap
-    g += `<rect x="${lx - 62}" y="${ly - 11}" width="124" height="22" rx="11" fill="var(--bg)" stroke="var(--border)"/>
-          <text x="${lx}" y="${ly + 4}" text-anchor="middle" font-size="12" fill="var(--text)">${esc(label)}</text>`;
-    g += box(k, x, yK, false);
+
+  // the main node, with its devices to either side
+  const MAINW = 240;
+  let trayBottom = yM + BH;
+  if (main) {
+    g += nodeBox(main, cx, yM, MAINW, false);
+    const mine = byNode[main.id] || [];
+    const left = mine.filter(c => c.kind === "wired"), right = mine.filter(c => c.kind === "wireless");
+    const gap = 26, rx0 = cx + MAINW / 2 + gap, lw = cx - MAINW / 2 - gap - 12;
+    if (right.length || !kids.length) {
+      const t = deviceTray(rx0, yM - 6, W - 12 - rx0, right, "No Wi-Fi devices", "left");
+      g += `<line x1="${cx + MAINW / 2}" y1="${yM + BH / 2}" x2="${t.x}" y2="${yM + BH / 2}" stroke="var(--border)" stroke-width="2"/>` + t.svg;
+      trayBottom = Math.max(trayBottom, yM - 6 + t.h);
+    }
+    if (left.length) {
+      const t = deviceTray(12, yM - 6, lw, left, "", "right");
+      g += `<line x1="${t.x + t.w}" y1="${yM + BH / 2}" x2="${cx - MAINW / 2}" y2="${yM + BH / 2}" stroke="var(--border)" stroke-width="2"/>` + t.svg;
+      trayBottom = Math.max(trayBottom, yM - 6 + t.h);
+    }
+  }
+
+  // satellites, each with its own tray underneath
+  const all = kids.concat(ghosts), n = all.length;
+  const yK = Math.max(yM + BH + 96, trayBottom + 40);
+  let bottom = yM + BH + 20;
+  all.forEach((k, i) => {
+    const x = W * (i + 1) / (n + 1), dashed = !k.in_mesh;
+    const bw = Math.max(190, Math.min(250, W / (n + 1) - 18));
+    if (!dashed) {
+      const bh_ = k.backhaul || {}, wired = bh_.type === "Wired";
+      const label = wired ? (bh_.mbps ? (bh_.mbps >= 1000 ? Math.round(bh_.mbps / 1000) + " Gbps" : bh_.mbps + " Mbps") + " wired" : "wired")
+                          : "wireless" + (bh_.rssi ? " " + bh_.rssi + " dBm" : "") + (bh_.mbps ? " · " + bh_.mbps + " Mbps" : "");
+      const slow = wired && bh_.mbps && bh_.mbps < 1000, off = k.reachable === false;
+      const stroke = off ? "var(--crit-emph)" : slow ? "var(--warn-emph)" : "var(--accent)";
+      const sy = main ? yM + BH : yM;
+      g += `<path d="M ${cx} ${sy} C ${cx} ${yK - 46}, ${x} ${sy + 46}, ${x} ${yK}" fill="none" stroke="${stroke}" stroke-width="${wired ? 3 : 2}" ${wired && !off ? "" : 'stroke-dasharray="7 5"'}/>`;
+      const lx = cx + (x - cx) * 0.62, ly = sy + (yK - sy) * 0.55;
+      g += `<rect x="${lx - 62}" y="${ly - 11}" width="124" height="22" rx="11" fill="var(--bg)" stroke="var(--border)"/>
+            <text x="${lx}" y="${ly + 4}" text-anchor="middle" font-size="12" fill="var(--text)">${esc(label)}</text>`;
+    }
+    g += nodeBox(k, x, yK, bw, dashed);
+    bottom = Math.max(bottom, yK + BH);
+    if (!dashed) {
+      const mine = byNode[k.id] || [], tw = Math.max(bw, Math.min(330, W / (n + 1) - 8)), ty = yK + BH + 22;
+      const t = deviceTray(x - tw / 2, ty, tw, mine, k.reachable === false ? "Offline" : "No devices connected", "center");
+      g += `<line x1="${x}" y1="${yK + BH}" x2="${x}" y2="${ty}" stroke="var(--border)" stroke-width="2"/>` + t.svg;
+      bottom = Math.max(bottom, ty + t.h);
+    }
   });
-  ghosts.forEach((n, i) => g += box(n, place(kids.length + i, kids.length + ghosts.length), yK, true));
+
+  const H = bottom + 16;
   const svg = $("topo"); svg.setAttribute("viewBox", `0 0 ${W} ${H}`); svg.innerHTML = g;
+  $("topoNote").textContent = unplaced ? `${unplaced} device${unplaced === 1 ? " is" : "s are"} not attached to a known node and not drawn.` : "";
 }
+$("topo").onclick = e => {
+  const dot = e.target.closest(".dot");
+  if (!dot || !state || !state.snapshot) return;
+  $("q").value = dot.dataset.name; $("nodeFilter").value = "";
+  renderClients(state.snapshot);
+  $("h-clients").scrollIntoView({behavior: "smooth", block: "start"});
+};
+
 function inetLabel(snap) {
   const ok = snap.internet.filter(i => i.loss < 100);
   if (!snap.internet.length) return "";

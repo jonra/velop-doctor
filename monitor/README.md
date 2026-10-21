@@ -6,7 +6,7 @@ Standard library only: nothing to install except Python 3.9+.
 ## What you get
 
 - **Problems** panel: plain-language findings, each saying what is wrong and what to try.
-- **Network map**: nodes, who connects through whom, wired or wireless backhaul, link speed.
+- **Network map**: a topology diagram from the internet through your upstream router to the main node and satellites, with wired or wireless backhaul and link speed on each link. Every device is drawn as a dot on the node it uses, grouped by band (wired ones as squares) and coloured by last reported signal, so crowding and weak spots are visible at a glance. A node with nothing connected shows an empty tray, an offline node says so. Hover a dot for details; click it to find it in the table.
 - **Nodes** table: reachable? answering its API? **in sync with the mesh?** firmware, ping, Wi-Fi device count.
 - **Devices** table: every online device, which node it is on, band, signal, link rate.
 - **Connection tests**: DNS timing through the Velop, your ISP and a public resolver; TCP reachability; path MTU; the internet seen from the router *and* from this computer (so you can tell a bad line from bad Wi-Fi); this computer's own Wi-Fi quality; DHCP pool usage.
