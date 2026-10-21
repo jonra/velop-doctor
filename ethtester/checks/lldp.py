@@ -18,15 +18,17 @@ def _age_seconds(age: str | None) -> int | None:
 
 
 def parse_lldp(raw: str, interface: str) -> LldpResult | None:
-    ifaces = json.loads(raw).get("lldp", {})
-    ifaces = ifaces.get("interface", {}) if isinstance(ifaces, dict) else {}
+    data = json.loads(raw)
+    lldp = data.get("lldp") if isinstance(data, dict) else None
+    ifaces = lldp.get("interface") if isinstance(lldp, dict) else None
     if isinstance(ifaces, list):
         merged: dict = {}
         for item in ifaces:
-            merged.update(item)
+            if isinstance(item, dict):
+                merged.update(item)
         ifaces = merged
-    entry = ifaces.get(interface)
-    if not entry:
+    entry = ifaces.get(interface) if isinstance(ifaces, dict) else None
+    if not isinstance(entry, dict):
         return None
 
     chassis = entry.get("chassis", {})

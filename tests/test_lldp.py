@@ -51,3 +51,14 @@ def test_run_command_errors():
     assert run_command(["false"], check=False) == ""
     with pytest.raises(CheckError):
         run_command(["definitely-not-a-command-xyz"])
+
+
+@pytest.mark.parametrize("raw", [
+    '{"lldp": null}',
+    '{"lldp": {"interface": null}}',
+    '{"lldp": {"interface": [null]}}',
+    '{"lldp": {"interface": {"eth0": null}}}',
+    '[]',
+])
+def test_null_sections_give_none(raw):
+    assert parse_lldp(raw, "eth0") is None
