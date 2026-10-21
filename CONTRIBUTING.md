@@ -13,6 +13,17 @@ PYTHONPATH=src:tests python3 -m unittest discover -s tests -v
 No third-party packages are needed, and none should be added to `monitor/`
 without a strong reason: easy installation is a feature.
 
+## The probe
+
+```bash
+cd probe
+python3 -m venv .venv && .venv/bin/pip install pillow pytest
+.venv/bin/pytest
+```
+
+It runs on a Mac or Linux box without the Pi hardware; sample screens are written to
+`probe/tests/output/`. Pi-side install and the display are covered in `probe/README.md`.
+
 ## Try your change against the UI
 
 ```bash

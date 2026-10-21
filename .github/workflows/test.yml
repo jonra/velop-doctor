@@ -15,3 +15,18 @@ jobs:
       - name: Run tests
         working-directory: monitor
         run: PYTHONPATH=src:tests python -m unittest discover -s tests -v
+  probe:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python: ["3.11", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - name: Run tests
+        working-directory: probe
+        run: |
+          pip install pillow pytest
+          python -m pytest -q
