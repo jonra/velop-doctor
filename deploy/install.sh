@@ -23,10 +23,12 @@ apt-get install -y python3-pil python3-spidev python3-gpiozero python3-lgpio lld
 raspi-config nonint do_spi 0
 systemctl enable --now lldpd
 
-if ! nmcli -t -f NAME connection show | grep -x ethtester >/dev/null; then
-  nmcli connection add type ethernet ifname "$IFACE" con-name ethtester \
-    ipv4.method auto ipv4.dhcp-timeout 2147483647 ipv6.method ignore \
-    connection.autoconnect-retries 0 connection.autoconnect-priority 10
+NM_SETTINGS=(connection.interface-name "$IFACE" ipv4.method auto ipv4.dhcp-timeout 2147483647
+  ipv6.method ignore connection.autoconnect-retries 0 connection.autoconnect-priority 10)
+if nmcli -t -f NAME connection show | grep -x ethtester >/dev/null; then
+  nmcli connection modify ethtester "${NM_SETTINGS[@]}"
+else
+  nmcli connection add type ethernet con-name ethtester "${NM_SETTINGS[@]}"
 fi
 
 mkdir -p /opt/ethtester /var/log/ethtester
@@ -41,5 +43,6 @@ fi
 cp "$SRC/deploy/ethtester.service" /etc/systemd/system/ethtester.service
 systemctl daemon-reload
 systemctl enable ethtester
+systemctl try-restart ethtester
 
-echo "Installed. Check the display version in /boot/firmware/ethtester.toml, then reboot."
+echo "Installed. On a first install, reboot to enable SPI; on a re-run the service has been restarted."
