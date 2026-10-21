@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "velop-doctor"
+version = "0.1.0"
+description = "Local debugging dashboard for Linksys Velop mesh networks: node health, backhaul, clients, sync status and history."
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "MIT" }
+keywords = ["linksys", "velop", "mesh", "wifi", "monitoring", "jnap"]
+dependencies = []
+
+[project.scripts]
+velop-doctor = "velop_doctor.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+velop_doctor = ["web/*.html"]

@@ -1,0 +1,8 @@
+__pycache__/
+*.egg-info/
+.venv/
+build/
+dist/
+*.db
+*.db-journal
+velop_dump.json

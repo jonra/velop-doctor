@@ -1,0 +1,360 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Velop Doctor</title>
+<style>
+:root{
+  --bg:#f6f7f9; --surface:#fff; --text:#16191d; --muted:#5d6672; --border:#dfe3e8;
+  --ok:#0f7b45; --ok-bg:#e4f4ec; --warn:#9a5b00; --warn-bg:#fdf1dc;
+  --crit:#b3261e; --crit-bg:#fbe7e5; --info:#2858c4; --info-bg:#e6edfb;
+  --accent:#2858c4; --shadow:0 1px 2px rgba(0,0,0,.06);
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --bg:#101215; --surface:#181b20; --text:#e8eaed; --muted:#9aa3ae; --border:#2b3037;
+    --ok:#4cc38a; --ok-bg:#12261c; --warn:#e7a740; --warn-bg:#2a2112;
+    --crit:#ff7b72; --crit-bg:#2d1715; --info:#7ea6ff; --info-bg:#16203a;
+    --accent:#7ea6ff; --shadow:none;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#101215; --surface:#181b20; --text:#e8eaed; --muted:#9aa3ae; --border:#2b3037;
+  --ok:#4cc38a; --ok-bg:#12261c; --warn:#e7a740; --warn-bg:#2a2112;
+  --crit:#ff7b72; --crit-bg:#2d1715; --info:#7ea6ff; --info-bg:#16203a;
+  --accent:#7ea6ff; --shadow:none;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);
+  font:15px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
+main{max-width:1100px;margin:0 auto;padding:16px}
+header{display:flex;flex-wrap:wrap;gap:12px;align-items:center;justify-content:space-between;margin-bottom:16px}
+h1{font-size:20px;margin:0;display:flex;gap:10px;align-items:center}
+h2{font-size:13px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin:0 0 10px}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:16px;margin-bottom:16px;box-shadow:var(--shadow)}
+.row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.muted{color:var(--muted)} .small{font-size:13px}
+.pill{display:inline-flex;gap:6px;align-items:center;border-radius:999px;padding:3px 10px;font-size:13px;font-weight:600}
+.pill.ok{background:var(--ok-bg);color:var(--ok)} .pill.warning{background:var(--warn-bg);color:var(--warn)}
+.pill.critical{background:var(--crit-bg);color:var(--crit)} .pill.info,.pill.unknown{background:var(--info-bg);color:var(--info)}
+.demo{background:var(--warn-bg);color:var(--warn);border-radius:6px;padding:2px 8px;font-size:12px;font-weight:700}
+button{font:inherit;border:1px solid var(--border);background:var(--surface);color:var(--text);
+  border-radius:8px;padding:6px 12px;cursor:pointer}
+button:hover{border-color:var(--accent)} button.primary{background:var(--accent);color:#fff;border-color:var(--accent)}
+button.danger{border-color:var(--crit);color:var(--crit)} button:focus-visible,select:focus-visible,input:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+button.small{padding:3px 8px;font-size:13px}
+.finding{display:flex;gap:12px;padding:10px 12px;border-radius:8px;margin-bottom:8px;border:1px solid var(--border)}
+.finding .ic{font-weight:800;width:20px;text-align:center}
+.finding.critical{background:var(--crit-bg);border-color:var(--crit)} .finding.critical .ic{color:var(--crit)}
+.finding.warning{background:var(--warn-bg);border-color:var(--warn)} .finding.warning .ic{color:var(--warn)}
+.finding.info{background:var(--info-bg)} .finding.info .ic{color:var(--info)}
+.finding b{display:block} .finding span{color:var(--muted);font-size:14px}
+.allgood{color:var(--ok);font-weight:600}
+table{width:100%;border-collapse:collapse;font-size:14px}
+th{text-align:left;font-weight:600;color:var(--muted);font-size:12px;text-transform:uppercase;letter-spacing:.04em;padding:6px 8px;border-bottom:1px solid var(--border)}
+td{padding:7px 8px;border-bottom:1px solid var(--border);vertical-align:middle}
+tr:last-child td{border-bottom:0}
+.tablewrap{overflow-x:auto}
+.bar{display:inline-block;width:54px;height:8px;border-radius:4px;background:var(--border);vertical-align:middle;margin-right:6px;overflow:hidden}
+.bar i{display:block;height:100%}
+.tag{font-size:12px;padding:1px 7px;border-radius:5px;background:var(--info-bg);color:var(--info);font-weight:600}
+.tag.bad{background:var(--crit-bg);color:var(--crit)} .tag.warn{background:var(--warn-bg);color:var(--warn)} .tag.good{background:var(--ok-bg);color:var(--ok)}
+svg text{font-family:inherit}
+#topo{width:100%;height:auto}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:12px}
+.chart{border:1px solid var(--border);border-radius:8px;padding:8px 10px}
+.timeline li{display:flex;gap:10px;padding:5px 0;border-bottom:1px solid var(--border);font-size:14px}
+.timeline{list-style:none;padding:0;margin:0}
+.timeline time{color:var(--muted);min-width:96px;font-variant-numeric:tabular-nums}
+input,select{font:inherit;border:1px solid var(--border);background:var(--surface);color:var(--text);border-radius:8px;padding:5px 8px}
+dialog{border:1px solid var(--border);border-radius:12px;background:var(--surface);color:var(--text);max-width:460px;width:calc(100% - 32px);padding:20px}
+dialog::backdrop{background:rgba(0,0,0,.5)}
+dialog ul{padding-left:18px;margin:10px 0}
+.toast{position:fixed;bottom:16px;left:50%;transform:translateX(-50%);background:var(--text);color:var(--bg);padding:8px 14px;border-radius:8px;font-size:14px;max-width:90%}
+@media (max-width:600px){main{padding:12px}.hide-sm{display:none}}
+</style>
+</head>
+<body>
+<main>
+<header>
+  <h1>Velop Doctor <span id="demo" class="demo" hidden>DEMO DATA</span></h1>
+  <div class="row">
+    <span id="health" class="pill unknown">Loading…</span>
+    <span id="updated" class="muted small"></span>
+    <button id="refresh" class="small">Refresh now</button>
+    <button id="theme" class="small" aria-label="Toggle dark mode">◐</button>
+  </div>
+</header>
+
+<section class="card" aria-labelledby="h-find"><h2 id="h-find">Problems</h2><div id="findings"></div></section>
+
+<section class="card" aria-labelledby="h-topo">
+  <div class="row" style="justify-content:space-between"><h2 id="h-topo">Network map</h2>
+    <div class="row small muted"><span id="steer"></span><button id="steerBtn" class="small"></button></div></div>
+  <svg id="topo" role="img" aria-label="Mesh topology diagram"></svg>
+</section>
+
+<section class="card" aria-labelledby="h-nodes"><h2 id="h-nodes">Nodes</h2>
+  <div class="tablewrap"><table id="nodes"></table></div></section>
+
+<section class="card" aria-labelledby="h-clients">
+  <div class="row" style="justify-content:space-between"><h2 id="h-clients">Devices</h2>
+    <div class="row"><select id="nodeFilter" aria-label="Filter by node"></select>
+    <input id="q" type="search" placeholder="Search devices" aria-label="Search devices"></div></div>
+  <div class="tablewrap"><table id="clients"></table></div>
+  <p id="clientNote" class="muted small"></p></section>
+
+<section class="card" aria-labelledby="h-lat"><div class="row" style="justify-content:space-between"><h2 id="h-lat">Latency, last hour</h2>
+  <select id="range" aria-label="Time range"><option value="60">1 hour</option><option value="360">6 hours</option><option value="1440">24 hours</option></select></div>
+  <div id="charts" class="grid"></div></section>
+
+<section class="card" aria-labelledby="h-ev"><h2 id="h-ev">Timeline</h2><ul id="events" class="timeline"></ul></section>
+</main>
+
+<dialog id="dlg"><form method="dialog"><h3 id="dlgTitle" style="margin-top:0"></h3>
+  <ul id="dlgEffects"></ul><p id="dlgRisk" class="small muted"></p>
+  <div class="row" style="justify-content:flex-end"><button value="cancel">Cancel</button>
+  <button id="dlgOk" value="ok" class="primary">Confirm</button></div></form></dialog>
+<div id="toast" class="toast" hidden></div>
+
+<script>
+const TOKEN = "__TOKEN__";
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+let state = null, clientsSort = "dbm";
+
+try { const t = localStorage.getItem("theme"); if (t) document.documentElement.dataset.theme = t; } catch (e) {}
+$("theme").onclick = () => {
+  const dark = matchMedia("(prefers-color-scheme: dark)").matches;
+  const cur = document.documentElement.dataset.theme || (dark ? "dark" : "light");
+  const next = cur === "dark" ? "light" : "dark";
+  document.documentElement.dataset.theme = next;
+  try { localStorage.setItem("theme", next); } catch (e) {}
+};
+
+const ago = ts => { const s = Math.max(0, Math.round(Date.now()/1000 - ts));
+  if (s < 90) return s + " s ago"; if (s < 5400) return Math.round(s/60) + " min ago";
+  if (s < 172800) return Math.round(s/3600) + " h ago"; return Math.round(s/86400) + " d ago"; };
+const dur = s => s < 90 ? s + " s" : s < 5400 ? Math.round(s/60) + " min" : Math.round(s/3600) + " h";
+const hhmm = ts => new Date(ts*1000).toLocaleString([], {month:"short", day:"numeric", hour:"2-digit", minute:"2-digit"});
+const ICON = {critical:"✕", warning:"!", info:"i", ok:"✓"};
+const LABEL = {ok:"All good", warning:"Needs attention", critical:"Problem", unknown:"No data yet"};
+
+async function api(path, opts) { const r = await fetch(path, opts); return r.json(); }
+
+async function post(body) {
+  return api("/api/actions", {method:"POST", headers:{"Content-Type":"application/json", "X-Velop-Token":TOKEN},
+    body:JSON.stringify(body)});
+}
+function toast(msg) { const t = $("toast"); t.textContent = msg; t.hidden = false; setTimeout(() => t.hidden = true, 4500); }
+
+async function runAction(action, params) {
+  const res = await post({action, params});
+  if (!res.preview) { toast(res.message || "Could not prepare that action."); return; }
+  const p = res.preview;
+  if (p.noop) { toast(p.title); return; }
+  $("dlgTitle").textContent = p.title;
+  $("dlgEffects").innerHTML = p.effects.map(e => "<li>" + esc(e) + "</li>").join("");
+  $("dlgRisk").textContent = "Risk: " + p.risk;
+  $("dlgOk").className = p.risk === "high" ? "danger" : "primary";
+  const dlg = $("dlg");
+  dlg.returnValue = "";
+  dlg.onclose = async () => {
+    if (dlg.returnValue !== "ok") return;
+    const out = await post({action, params, confirm:true});
+    toast(out.message || "Done");
+    setTimeout(load, 2500);
+  };
+  dlg.showModal();
+}
+
+function render() {
+  const s = state; if (!s) return;
+  $("demo").hidden = !s.demo;
+  $("health").className = "pill " + s.health;
+  $("health").textContent = ICON[s.health] ? ICON[s.health] + " " + LABEL[s.health] : LABEL[s.health];
+  const snap = s.snapshot;
+  $("updated").textContent = snap ? "Updated " + ago(snap.ts) : (s.last_error || "Waiting for first poll…");
+
+  // findings
+  const f = s.findings;
+  $("findings").innerHTML = f.length ? f.map(x =>
+    `<div class="finding ${esc(x.severity)}"><div class="ic" aria-hidden="true">${ICON[x.severity]}</div>
+     <div><b>${esc(x.title)}</b><span>${esc(x.detail)} <em>· for ${dur(Math.round(s.now - x.since))}</em></span></div></div>`).join("")
+    : (snap ? '<div class="allgood">✓ No problems detected.</div>' : '<span class="muted">Collecting data…</span>');
+  if (!snap) return;
+
+  // steering
+  $("steer").textContent = snap.steering === null ? "" : "Client steering is " + (snap.steering ? "on" : "off");
+  $("steerBtn").textContent = snap.steering ? "Turn off" : "Turn on";
+  $("steerBtn").hidden = snap.steering === null;
+  $("steerBtn").onclick = () => runAction(snap.steering ? "steering_off" : "steering_on");
+
+  renderTopo(snap, f); renderNodes(snap, f); renderClients(snap);
+}
+
+function nodeState(n, findings) {
+  const mine = findings.filter(f => f.key.endsWith(":" + n.id));
+  if (mine.some(f => f.severity === "critical")) return "critical";
+  if (mine.some(f => f.severity === "warning")) return "warning";
+  return "ok";
+}
+const COLOR = {ok:"var(--ok)", warning:"var(--warn)", critical:"var(--crit)"};
+
+function renderTopo(snap, findings) {
+  const W = 960, bw = 220, bh = 84;
+  const main = snap.nodes.find(n => n.role === "primary");
+  const kids = snap.nodes.filter(n => n.role !== "primary" && n.in_mesh);
+  const ghosts = snap.nodes.filter(n => n.role !== "primary" && !n.in_mesh);
+  const hasUp = !!snap.upstream;
+  const yI = 22, yU = 92, yM = hasUp ? 168 : 110, yK = yM + 150;
+  const H = yK + bh + 24, cx = W/2;
+  let g = "";
+  const box = (n, x, y, dashed) => {
+    const st = dashed ? "warning" : nodeState(n, findings);
+    const lines = dashed ? ["Registered, not in the mesh", n.ip || ""] :
+      [n.ip + (n.rtt_ms != null ? " · " + n.rtt_ms.toFixed(0) + " ms" : ""),
+       n.clients + " Wi-Fi device" + (n.clients === 1 ? "" : "s") + " · fw " + (n.firmware || "?")];
+    return `<g transform="translate(${x - bw/2},${y})">
+      <rect width="${bw}" height="${bh}" rx="10" fill="var(--surface)" stroke="${COLOR[st]}" stroke-width="2" ${dashed ? 'stroke-dasharray="6 4"' : ""}/>
+      <rect width="8" height="${bh}" rx="4" fill="${COLOR[st]}"/>
+      <text x="22" y="26" font-size="15" font-weight="700" fill="var(--text)">${esc(n.name.length > 24 ? n.name.slice(0,23) + "…" : n.name)}</text>
+      <text x="22" y="48" font-size="12.5" fill="var(--muted)">${esc(lines[0])}</text>
+      <text x="22" y="67" font-size="12.5" fill="var(--muted)">${esc(lines[1])}</text>
+      <text x="${bw - 14}" y="24" font-size="16" font-weight="800" text-anchor="end" fill="${COLOR[st]}">${ICON[st]}</text></g>`;
+  };
+  g += `<text x="${cx}" y="${yI + 5}" text-anchor="middle" font-size="14" font-weight="700" fill="var(--muted)">Internet ${inetLabel(snap)}</text>`;
+  g += `<line x1="${cx}" y1="${yI + 12}" x2="${cx}" y2="${hasUp ? yU : yM}" stroke="var(--border)" stroke-width="3"/>`;
+  if (hasUp) {
+    g += `<text x="${cx}" y="${yU + 18}" text-anchor="middle" font-size="13" fill="var(--muted)">Upstream router ${esc(snap.upstream.target)}${snap.upstream.rtt_ms != null ? " · " + snap.upstream.rtt_ms.toFixed(0) + " ms" : ""}${snap.wan.double_nat ? " · double NAT" : ""}</text>`;
+    g += `<line x1="${cx}" y1="${yU + 26}" x2="${cx}" y2="${yM}" stroke="var(--border)" stroke-width="3"/>`;
+  }
+  if (main) g += box(main, cx, yM, false);
+  const place = (i, n) => W * (i + 1) / (n + 1);
+  const pos = {};
+  kids.forEach((k, i) => pos[k.id] = place(i, kids.length + ghosts.length));
+  kids.forEach(k => {
+    const x = pos[k.id], bh_ = k.backhaul || {};
+    const wired = bh_.type === "Wired";
+    const label = wired ? (bh_.mbps ? (bh_.mbps >= 1000 ? Math.round(bh_.mbps/1000) + " Gbps" : bh_.mbps + " Mbps") + " wired" : "wired")
+                        : "wireless" + (bh_.rssi ? " " + bh_.rssi + " dBm" : "") + (bh_.mbps ? " · " + bh_.mbps + " Mbps" : "");
+    const slow = wired && bh_.mbps && bh_.mbps < 1000;
+    const stroke = slow ? "var(--warn)" : "var(--accent)";
+    g += `<path d="M ${cx} ${yM + bh} C ${cx} ${yK - 50}, ${x} ${yM + bh + 50}, ${x} ${yK}" fill="none" stroke="${stroke}" stroke-width="${wired ? 3 : 2}" ${wired ? "" : 'stroke-dasharray="7 5"'}/>`;
+    const lx = cx + (x - cx) * 0.62, ly = yM + bh + (yK - yM - bh) * 0.55; // near the child end so labels never overlap
+    g += `<rect x="${lx - 62}" y="${ly - 11}" width="124" height="22" rx="11" fill="var(--bg)" stroke="var(--border)"/>
+          <text x="${lx}" y="${ly + 4}" text-anchor="middle" font-size="12" fill="var(--text)">${esc(label)}</text>`;
+    g += box(k, x, yK, false);
+  });
+  ghosts.forEach((n, i) => g += box(n, place(kids.length + i, kids.length + ghosts.length), yK, true));
+  const svg = $("topo"); svg.setAttribute("viewBox", `0 0 ${W} ${H}`); svg.innerHTML = g;
+}
+function inetLabel(snap) {
+  const ok = snap.internet.filter(i => i.loss < 100);
+  if (!snap.internet.length) return "";
+  if (!ok.length) return "· unreachable";
+  const rtt = ok.map(i => i.rtt_ms).filter(v => v != null);
+  return "· " + (rtt.length ? Math.round(rtt.reduce((a, b) => a + b) / rtt.length) + " ms" : "up");
+}
+
+function renderNodes(snap, findings) {
+  const rows = snap.nodes.map(n => {
+    const st = n.in_mesh ? nodeState(n, findings) : "warning";
+    const tag = (t, c) => `<span class="tag ${c || ""}">${esc(t)}</span>`;
+    let sync = "–";
+    if (n.role === "primary") sync = tag("main", "good");
+    else if (!n.in_mesh) sync = tag("not in mesh", "warn");
+    else if (n.reachable === false) sync = tag("offline", "bad");
+    else if (n.api_ok === false) sync = tag("no API", "warn");
+    else if (n.default_pw) sync = tag("factory default", "warn");
+    else if (n.auth_ok === false) sync = tag("out of sync", "bad");
+    else if (n.auth_ok) sync = tag("in sync", "good");
+    const bh = n.backhaul;
+    const link = !bh ? "–" : esc(bh.type + (bh.mbps ? " · " + bh.mbps + " Mbps" : "")) +
+      (bh.age_s != null ? `<div class="muted small" title="Speed is a periodic measurement made by the node">measured ${dur(bh.age_s)} ago</div>` : "");
+    const reboot = n.in_mesh && n.ip ? `<button class="small danger" data-reboot="${esc(n.ip)}">Reboot</button>` : "";
+    return `<tr><td><b>${ICON[st]}</b> ${esc(n.name)}<div class="muted small">${esc(n.serial || "")}</div></td>
+      <td>${esc(n.ip || "–")}</td><td>${sync}</td><td>${link}</td>
+      <td class="hide-sm">${n.rtt_ms != null ? n.rtt_ms.toFixed(1) + " ms" : "–"}${n.loss ? ` <span class="tag bad">${n.loss.toFixed(0)}% loss</span>` : ""}</td>
+      <td>${n.clients}</td><td class="hide-sm">${esc(n.firmware || "–")}</td><td>${reboot}</td></tr>`;
+  }).join("");
+  $("nodes").innerHTML = `<tr><th>Node</th><th>Address</th><th>Status</th><th>Backhaul</th><th class="hide-sm">Ping</th><th>Wi-Fi devices</th><th class="hide-sm">Firmware</th><th></th></tr>` + rows;
+  document.querySelectorAll("[data-reboot]").forEach(b => b.onclick = () => runAction("reboot_node", {ip:b.dataset.reboot}));
+}
+
+function bar(dbm) {
+  if (dbm == null) return "–";
+  const pct = Math.max(0, Math.min(100, (dbm + 95) * 100 / 45));
+  const color = dbm <= -80 ? "var(--crit)" : dbm <= -70 ? "var(--warn)" : "var(--ok)";
+  return `<span class="bar" aria-hidden="true"><i style="width:${pct}%;background:${color}"></i></span>${dbm} dBm`;
+}
+function renderClients(snap) {
+  const sel = $("nodeFilter"), cur = sel.value;
+  sel.innerHTML = '<option value="">All nodes</option>' + snap.nodes.filter(n => n.in_mesh).map(n =>
+    `<option value="${esc(n.id)}">${esc(n.name)}</option>`).join("");
+  sel.value = cur;
+  const q = $("q").value.toLowerCase();
+  let list = snap.clients.filter(c => (!sel.value || c.node_id === sel.value) &&
+    (!q || (c.name + " " + c.ip + " " + c.mac).toLowerCase().includes(q)));
+  const key = {dbm:c => c.dbm ?? 1, name:c => c.name.toLowerCase(), node:c => c.node || "", mbps:c => -(c.mbps ?? -1)}[clientsSort];
+  list.sort((a, b) => key(a) < key(b) ? -1 : key(a) > key(b) ? 1 : 0);
+  const th = (k, t, cls) => `<th class="${cls || ""}"><button class="small" data-sort="${k}" style="border:0;padding:0;background:none;font:inherit;color:inherit;text-transform:inherit">${t}${clientsSort === k ? " ▾" : ""}</button></th>`;
+  $("clients").innerHTML = `<tr>${th("name","Device")}${th("node","Node")}<th class="hide-sm">Band</th>${th("dbm","Signal")}${th("mbps","Link")}<th class="hide-sm">Address</th></tr>` +
+    list.map(c => {
+      const stale = c.age_s != null && c.age_s > 600;
+      return `<tr style="${stale ? "opacity:.55" : ""}"><td>${esc(c.name)}</td><td>${esc(c.node || "–")}</td>
+      <td class="hide-sm">${c.kind === "wired" ? "wired" : esc(c.band || "–")}</td>
+      <td>${c.kind === "wired" ? "–" : bar(c.dbm)}</td><td>${c.mbps ? c.mbps + " Mbps" : "–"}</td>
+      <td class="hide-sm">${esc(c.ip || "")}</td></tr>`;
+    }).join("");
+  document.querySelectorAll("[data-sort]").forEach(b => b.onclick = () => { clientsSort = b.dataset.sort; renderClients(snap); });
+  $("clientNote").textContent = `${list.length} online device${list.length === 1 ? "" : "s"} shown` +
+    (snap.offline_known ? ` · ${snap.offline_known} known device(s) offline` : "") +
+    " · dimmed rows were last seen a while ago, so the signal may be out of date.";
+}
+$("q").oninput = () => state && renderClients(state.snapshot);
+$("nodeFilter").onchange = () => state && renderClients(state.snapshot);
+
+async function loadCharts() {
+  const minutes = +$("range").value;
+  $("h-lat").textContent = "Latency, last " + (minutes === 60 ? "hour" : minutes / 60 + " hours");
+  const h = await api("/api/history?minutes=" + minutes);
+  const keys = Object.keys(h.series).sort((a, b) => a.localeCompare(b));
+  const now = Math.floor(Date.now() / 1000), W = 300, H = 64;
+  $("charts").innerHTML = keys.length ? keys.map(k => {
+    const pts = h.series[k], t0 = now - minutes * 60;
+    const rtts = pts.map(p => p[1]).filter(v => v != null);
+    const max = Math.max(20, ...rtts) * 1.1;
+    const x = t => ((t - t0) / (minutes * 60)) * W, y = v => H - 4 - (v / max) * (H - 10);
+    let path = "", pen = false, down = "";
+    pts.forEach(p => {
+      if (p[1] == null) { pen = false; down += `<rect x="${x(p[0]) - 1}" y="0" width="3" height="${H}" fill="var(--crit)" opacity=".35"/>`; return; }
+      path += (pen ? "L" : "M") + x(p[0]).toFixed(1) + " " + y(p[1]).toFixed(1) + " "; pen = true;
+    });
+    const last = pts[pts.length - 1], lossy = pts.filter(p => p[2] > 0).length;
+    const nm = k.replace(/^(node|internet|upstream):/, (m, a) => ({node:"", internet:"Internet ", upstream:"Upstream "}[a]));
+    return `<div class="chart"><div class="row" style="justify-content:space-between"><b class="small">${esc(nm)}</b>
+      <span class="muted small">${last && last[1] != null ? last[1].toFixed(0) + " ms" : "down"}${lossy ? " · " + lossy + " lossy samples" : ""}</span></div>
+      <svg viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="Latency chart for ${esc(nm)}">${down}
+      <path d="${path}" fill="none" stroke="var(--accent)" stroke-width="1.6"/></svg></div>`;
+  }).join("") : '<span class="muted">History appears after a few polls.</span>';
+}
+$("range").onchange = loadCharts;
+
+async function loadEvents() {
+  const e = (await api("/api/events?limit=60")).events;
+  $("events").innerHTML = e.length ? e.map(x => `<li><time>${hhmm(x.ts)}</time>
+    <span class="pill ${x.severity === "info" ? "unknown" : esc(x.severity)}" style="min-width:34px;justify-content:center">${ICON[x.severity] || "i"}</span>
+    <span>${esc(x.message)}</span></li>`).join("") : '<li class="muted">Nothing has changed since monitoring started.</li>';
+}
+
+async function load() {
+  try { state = await api("/api/state"); render(); } catch (e) { $("health").textContent = "Server unreachable"; }
+  loadEvents(); loadCharts();
+}
+$("refresh").onclick = async () => { await post({action:"refresh"}); setTimeout(load, 4000); toast("Refreshing…"); };
+load(); setInterval(load, 15000);
+</script>
+</body>
+</html>
