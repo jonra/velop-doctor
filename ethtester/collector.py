@@ -5,7 +5,7 @@ import time
 from dataclasses import dataclass
 from typing import Callable
 
-from .checks.dhcp import check_dhcp
+from .checks.dhcp import check_dhcp, reactivate
 from .checks.dns import check_dns
 from .checks.gateway import check_gateway
 from .checks.internet import check_internet
@@ -30,6 +30,7 @@ class Checks:
     gateway: Callable = check_gateway
     dns: Callable = check_dns
     internet: Callable = check_internet
+    reactivate: Callable = reactivate
 
 
 def _safe(fn, fallback, *args):
@@ -51,20 +52,30 @@ class Collector:
     def collect(self) -> Snapshot:
         cfg, checks, now = self.cfg, self.checks, self.clock()
 
-        link = _safe(checks.link, LinkResult(up=False), cfg.interface)
+        try:
+            link = checks.link(cfg.interface)
+        except Exception:
+            # Don't feed a made-up reading into the flap window or the plug session.
+            log.exception("check link failed")
+            return Snapshot(link=LinkResult(up=False))
         flaps = self.flaps.update(now, link.carrier_changes)
-        self.session.on_link(now, link.up)
+        new_plug = self.session.on_link(now, link.up, link.carrier_changes)
         if not link.up:
             return Snapshot(link=link, flaps_last_minute=flaps)
 
+        if new_plug:
+            _safe(checks.reactivate, None, cfg.interface)
         since = self.session.seconds_since_link(now)
         lldp = _safe(checks.lldp, None, cfg.interface)
         if (lldp is not None and self.session.fresh and lldp.age_s is not None
                 and lldp.age_s > since + LLDP_AGE_SLACK_S):
             lldp = None
 
-        dhcp = _safe(checks.dhcp, DhcpResult(), cfg.interface)
-        self.session.on_ip(now, dhcp.ip is not None)
+        if new_plug:
+            dhcp = DhcpResult()  # any lease now is the previous port's; wait for the new one
+        else:
+            dhcp = _safe(checks.dhcp, DhcpResult(), cfg.interface)
+            self.session.on_ip(now, dhcp.ip is not None)
         base = dict(
             link=link,
             flaps_last_minute=flaps,

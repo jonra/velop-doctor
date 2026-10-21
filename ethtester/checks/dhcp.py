@@ -28,3 +28,8 @@ def parse_nmcli(raw: str) -> DhcpResult:
 
 def check_dhcp(interface: str, run=run_command) -> DhcpResult:
     return parse_nmcli(run(["nmcli", "-t", "-f", "IP4,DHCP4", "device", "show", interface]))
+
+
+def reactivate(interface: str, run=run_command) -> None:
+    """Ask NetworkManager to reconnect, so a new plug gets a fresh DHCP lease."""
+    run(["nmcli", "--wait", "0", "device", "connect", interface], check=False)

@@ -1,4 +1,4 @@
-from ethtester.checks.dhcp import check_dhcp, parse_nmcli
+from ethtester.checks.dhcp import check_dhcp, parse_nmcli, reactivate
 from ethtester.results import DhcpResult
 
 LEASE = """IP4.ADDRESS[1]:192.168.1.57/24
@@ -41,3 +41,14 @@ def test_check_dhcp_command():
 
     assert check_dhcp("eth0", run=fake_run).ip == "192.168.1.57"
     assert calls == [["nmcli", "-t", "-f", "IP4,DHCP4", "device", "show", "eth0"]]
+
+
+def test_reactivate_reconnects_device_without_waiting():
+    calls = []
+
+    def run(cmd, check=True):
+        calls.append((cmd, check))
+        return ""
+
+    reactivate("eth0", run=run)
+    assert calls == [(["nmcli", "--wait", "0", "device", "connect", "eth0"], False)]

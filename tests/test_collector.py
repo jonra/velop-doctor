@@ -24,6 +24,7 @@ class Fake:
         self.gateway_result = GatewayResult(True, 2.0, 0.0)
         self.dns_result = DnsResult(True, "192.168.1.1")
         self.internet_result = InternetResult(True, "84.1.2.3")
+        self.reactivate_result = None
 
     def checks(self) -> Checks:
         def make(name):
@@ -34,7 +35,8 @@ class Fake:
                     raise result
                 return result
             return fn
-        return Checks(**{n: make(n) for n in ("link", "lldp", "dhcp", "gateway", "dns", "internet")})
+        return Checks(**{n: make(n) for n in ("link", "lldp", "dhcp", "gateway", "dns", "internet",
+                                                   "reactivate")})
 
     def names(self):
         return [name for name, _ in self.calls]
@@ -141,3 +143,81 @@ def test_seconds_to_ip_and_flaps():
     s = c.collect()
     assert s.seconds_to_ip == 2.5
     assert s.flaps_last_minute == 0
+
+
+def test_observed_replug_reactivates_once():
+    fake, clock, c = make()
+    fake.link_result = LinkResult(up=False, carrier_changes=3)
+    c.collect()
+    clock.now = 1.0
+    fake.link_result = LinkResult(up=True, speed_mbps=1000, carrier_changes=4)
+    s = c.collect()
+    assert fake.names() == ["link", "link", "reactivate", "lldp"]
+    assert ("reactivate", ("eth0",)) in fake.calls
+    assert s.dhcp == DhcpResult()
+    clock.now = 2.0
+    c.collect()
+    assert fake.names().count("reactivate") == 1
+
+
+def test_replug_between_ticks_resets_session():
+    fake, clock, c = make()
+    c.collect()
+    assert "reactivate" not in fake.names()
+    clock.now = 10.0
+    fake.link_result = LinkResult(up=True, speed_mbps=1000, carrier_changes=4)
+    s = c.collect()
+    assert fake.names().count("reactivate") == 1
+    assert s.seconds_since_link == 0.0
+    assert s.dhcp == DhcpResult()
+    assert s.gateway is None
+    clock.now = 12.0
+    s = c.collect()
+    assert s.dhcp == LEASE
+    assert s.seconds_since_link == 2.0
+    assert s.seconds_to_ip == 2.0
+
+
+def test_live_link_at_start_does_not_reactivate():
+    fake, clock, c = make()
+    c.collect()
+    clock.now = 5.0
+    c.collect()
+    assert "reactivate" not in fake.names()
+
+
+def test_reactivate_failure_is_contained():
+    fake, clock, c = make()
+    fake.link_result = LinkResult(up=False)
+    c.collect()
+    fake.link_result = LinkResult(up=True, speed_mbps=1000)
+    fake.reactivate_result = RuntimeError("nmcli broke")
+    clock.now = 1.0
+    assert c.collect().link.up
+
+
+def test_link_check_exception_skips_flaps_and_session():
+    fake, clock, c = make()
+    fake.link_result = RuntimeError("sysfs broke")
+    s = c.collect()
+    assert s.link == LinkResult(up=False)
+    clock.now = 1.0
+    fake.link_result = LinkResult(up=True, speed_mbps=1000, carrier_changes=10)
+    c.collect()
+    clock.now = 2.0
+    s = c.collect()
+    assert s.flaps_last_minute == 0
+    assert "reactivate" not in fake.names()
+
+
+def test_link_check_exception_keeps_plug_session():
+    fake, clock, c = make()
+    c.collect()
+    clock.now = 1.0
+    fake.link_result = RuntimeError("sysfs broke")
+    c.collect()
+    clock.now = 2.0
+    fake.link_result = LinkResult(up=True, speed_mbps=1000, carrier_changes=2)
+    s = c.collect()
+    assert s.seconds_since_link == 2.0
+    assert "reactivate" not in fake.names()
