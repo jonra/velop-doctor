@@ -12,7 +12,7 @@ CREATE TABLE IF NOT EXISTS samples (ts INTEGER NOT NULL, target TEXT NOT NULL,
     loss REAL, rtt REAL);
 CREATE INDEX IF NOT EXISTS samples_idx ON samples (target, ts);
 CREATE TABLE IF NOT EXISTS events (id INTEGER PRIMARY KEY AUTOINCREMENT, ts INTEGER NOT NULL,
-    severity TEXT NOT NULL, kind TEXT NOT NULL, message TEXT NOT NULL);
+    severity TEXT NOT NULL, kind TEXT NOT NULL, message TEXT NOT NULL, subject TEXT);
 CREATE TABLE IF NOT EXISTS conditions (key TEXT PRIMARY KEY, first_seen INTEGER NOT NULL,
     last_seen INTEGER NOT NULL, active INTEGER NOT NULL DEFAULT 0,
     severity TEXT, title TEXT, detail TEXT, min_seconds INTEGER NOT NULL DEFAULT 0);
@@ -28,6 +28,10 @@ class Store:
         self._lock = threading.Lock()
         with self._lock:
             self._db.executescript(SCHEMA)
+            try:  # databases created before events had a subject
+                self._db.execute("ALTER TABLE events ADD COLUMN subject TEXT")
+            except sqlite3.OperationalError:
+                pass
 
     def _run(self, sql, args=()):
         with self._lock:
@@ -44,6 +48,9 @@ class Store:
                 rows.append((snap["ts"], f"node:{n['name']}", n["loss"], n["rtt_ms"]))
         for i in snap.get("internet", []):
             rows.append((snap["ts"], f"internet:{i['target']}", i["loss"], i["rtt_ms"]))
+        rp = (snap.get("probes") or {}).get("router_ping")
+        if rp:
+            rows.append((snap["ts"], f"router:{rp['target']}", rp["loss"], rp["rtt_ms"]))
         if snap.get("upstream"):
             u = snap["upstream"]
             rows.append((snap["ts"], f"upstream:{u['target']}", u["loss"], u["rtt_ms"]))
@@ -63,9 +70,25 @@ class Store:
         return out
 
     # --- events ---------------------------------------------------------
-    def add_event(self, ts, severity, kind, message):
-        self._run("INSERT INTO events (ts, severity, kind, message) VALUES (?, ?, ?, ?)",
-                  (ts, severity, kind, message))
+    def add_event(self, ts, severity, kind, message, subject=None):
+        self._run("INSERT INTO events (ts, severity, kind, message, subject) VALUES (?, ?, ?, ?, ?)",
+                  (ts, severity, kind, message, subject))
+
+    def count_events(self, kind, subject, since_ts):
+        return self._run("SELECT COUNT(*) AS n FROM events WHERE kind = ? AND subject = ? AND ts >= ?",
+                         (kind, subject, since_ts))[0]["n"]
+
+    def availability(self, since_ts):
+        """Per target: share of samples that got an answer, plus latency summary."""
+        out = {}
+        for r in self._run(
+                "SELECT target, COUNT(*) AS n, SUM(CASE WHEN loss < 100 THEN 1 ELSE 0 END) AS up, "
+                "AVG(CASE WHEN loss < 100 THEN rtt END) AS avg_rtt, MAX(rtt) AS max_rtt, "
+                "AVG(loss) AS avg_loss FROM samples WHERE ts >= ? GROUP BY target", (since_ts,)):
+            out[r["target"]] = {"samples": r["n"], "up_pct": round(100.0 * r["up"] / r["n"], 2),
+                                "avg_rtt": r["avg_rtt"], "max_rtt": r["max_rtt"],
+                                "avg_loss": round(r["avg_loss"] or 0, 1)}
+        return out
 
     def events(self, limit=100):
         return [dict(r) for r in self._run(

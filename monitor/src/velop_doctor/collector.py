@@ -3,31 +3,14 @@ from __future__ import annotations
 
 import ipaddress
 import re
-import subprocess
-import sys
 import time
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 
+from . import probes
 from .jnap import AuthError, JnapClient, JnapError
 
 UUID_RE = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-", re.I)
-
-
-def ping_host(ip, count=3):
-    """Return (loss_percent, avg_rtt_ms or None)."""
-    if sys.platform == "darwin":
-        cmd = ["ping", "-c", str(count), "-i", "0.3", "-t", "4", ip]
-    else:
-        cmd = ["ping", "-c", str(count), "-i", "0.3", "-W", "2", ip]
-    try:
-        out = subprocess.run(cmd, capture_output=True, text=True, timeout=20).stdout
-    except (OSError, subprocess.SubprocessError):
-        return 100.0, None
-    loss = re.search(r"([\d.]+)% packet loss", out)
-    rtt = re.search(r"=\s*[\d.]+/([\d.]+)/", out)
-    return (float(loss.group(1)) if loss else 100.0,
-            float(rtt.group(1)) if rtt else None)
 
 
 def _is_private(ip):
@@ -66,12 +49,32 @@ def _radios(output):
     return radios
 
 
-def collect(cfg, password, *, client=JnapClient, pinger=ping_host, now=time.time):
+def _ping(pinger, ip):
+    """Normalise a pinger result to (loss, rtt, jitter); older pingers return two values."""
+    res = pinger(ip)
+    return res[0], res[1], (res[2] if len(res) > 2 else None)
+
+
+def _ping_entry(pinger, ip, label):
+    loss, rtt, jitter = _ping(pinger, ip)
+    return {"target": ip, "label": label, "loss": loss, "rtt_ms": rtt, "jitter_ms": jitter}
+
+
+def _ping_many(pinger, targets, label):
+    if not targets:
+        return []
+    with ThreadPoolExecutor(max_workers=len(targets)) as pool:
+        return list(pool.map(lambda t: _ping_entry(pinger, t, label), targets))
+
+
+def collect(cfg, password, *, client=JnapClient, pinger=probes.ping_host,
+            probe=probes, now=time.time):
     ts = int(now())
     snap = {
         "ts": ts, "primary": {"ip": cfg.primary, "reachable": False, "auth_ok": None},
         "nodes": [], "clients": [], "wan": {}, "steering": None,
         "internet": [], "upstream": None, "errors": {}, "offline_known": 0,
+        "probes": {}, "dhcp": None,
     }
 
     def jc(host):
@@ -117,6 +120,7 @@ def collect(cfg, password, *, client=JnapClient, pinger=ping_host, now=time.time
         snap["wan"] = {
             "status": wan_out.get("wanStatus"), "type": conn.get("wanType"),
             "ip": wan_ip, "gateway": conn.get("gateway"),
+            "dns": [d for d in (conn.get("dnsServer1"), conn.get("dnsServer2")) if d],
             "double_nat": bool(wan_ip) and _is_private(wan_ip),
         }
 
@@ -130,10 +134,12 @@ def collect(cfg, password, *, client=JnapClient, pinger=ping_host, now=time.time
         if (dev.get("model") or {}).get("deviceType") != "Infrastructure":
             continue
         conn = (dev.get("connections") or [{}])[0]
-        ip = conn.get("ipAddress")
+        bh = backhaul.get(dev["deviceID"])
+        # Prefer the backhaul address: after a failed setup the device entry can keep
+        # an address from a second network the node briefly created.
+        ip = (bh.get("ipAddress") if bh else None) or conn.get("ipAddress")
         is_primary = bool(dev.get("isAuthority")) or dev.get("nodeType") == "Master" \
             or ip == cfg.primary
-        bh = backhaul.get(dev["deviceID"])
         node = {
             "id": dev["deviceID"], "name": dev.get("friendlyName") or "Node",
             "serial": (dev.get("unit") or {}).get("serialNumber"), "ip": ip,
@@ -143,9 +149,9 @@ def collect(cfg, password, *, client=JnapClient, pinger=ping_host, now=time.time
             "parent_ip": bh.get("parentIPAddress") if bh else None,
             "backhaul": None,
             "in_mesh": is_primary or bh is not None,
-            "reachable": None, "loss": None, "rtt_ms": None,
+            "reachable": None, "loss": None, "rtt_ms": None, "jitter_ms": None,
             "api_ok": None, "auth_ok": None, "default_pw": None,
-            "radios": [], "clients": 0,
+            "radios": [], "clients": 0, "clients_24ghz": 0,
         }
         if bh:
             try:
@@ -163,12 +169,14 @@ def collect(cfg, password, *, client=JnapClient, pinger=ping_host, now=time.time
             node["api_ok"], node["auth_ok"] = True, True
         nodes.append(node)
 
-    # --- probe every node in parallel ---------------------------------------
-    def probe(node):
+    # --- probe every node, and run the active probes, in parallel ----------------
+    def probe_node(node):
         if not node["ip"]:
+            if node["in_mesh"]:
+                node["reachable"] = False
             return
-        loss, rtt = pinger(node["ip"])
-        node.update(loss=loss, rtt_ms=rtt, reachable=loss < 100)
+        loss, rtt, jitter = _ping(pinger, node["ip"])
+        node.update(loss=loss, rtt_ms=rtt, jitter_ms=jitter, reachable=loss < 100)
         if node["role"] == "primary" or not node["reachable"]:
             return
         c = jc(node["ip"])
@@ -191,15 +199,39 @@ def collect(cfg, password, *, client=JnapClient, pinger=ping_host, now=time.time
         except JnapError:
             pass
 
-    wan_gw = (snap["wan"] or {}).get("gateway")
-    with ThreadPoolExecutor(max_workers=8) as pool:
-        futures = [pool.submit(probe, n) for n in nodes]
-        inet = pool.submit(_ping_many, pinger, cfg.ping_targets, "internet")
-        up = pool.submit(_ping_one, pinger, wan_gw, "upstream") if wan_gw else None
-        for f in futures:
+    wan = snap["wan"] or {}
+    inet_target = cfg.ping_targets[0] if cfg.ping_targets else "1.1.1.1"
+    dns_targets = [("router", cfg.primary)]
+    dns_targets += [("isp", d) for d in wan.get("dns", [])[:1] if d != cfg.primary]
+    dns_targets.append(("public", "1.1.1.1"))
+
+    with ThreadPoolExecutor(max_workers=16) as pool:
+        node_f = [pool.submit(probe_node, n) for n in nodes]
+        inet_f = pool.submit(_ping_many, pinger, cfg.ping_targets, "internet")
+        up_f = pool.submit(_ping_entry, pinger, wan["gateway"], "upstream") \
+            if wan.get("gateway") else None
+        dns_f = [(label, server, pool.submit(probe.dns_probe, server)) for label, server in dns_targets]
+        tcp_f = [(t, pool.submit(probe.tcp_probe, t)) for t in cfg.ping_targets]
+        mtu_f = pool.submit(probe.path_mtu, inet_target)
+        rping_f = pool.submit(probe.router_ping, primary, inet_target) \
+            if getattr(cfg, "router_ping", True) else None
+        dhcp_f = pool.submit(probe.dhcp_usage, primary)
+        for f in node_f:
             f.result()
-        snap["internet"] = inet.result()
-        snap["upstream"] = up.result() if up else None
+        snap["internet"] = inet_f.result()
+        snap["upstream"] = up_f.result() if up_f else None
+        snap["probes"] = {
+            "dns": [{"label": label, "server": server, **f.result()} for label, server, f in dns_f],
+            "tcp": [{"target": f"{t}:443", "ms": f.result()} for t, f in tcp_f],
+            "mtu": mtu_f.result(),
+            "host_wifi": None,
+            "router_ping": rping_f.result() if rping_f else None,
+        }
+        snap["dhcp"] = dhcp_f.result()
+
+    # Asking macOS for the Wi-Fi link makes it scan for networks, which pauses the radio
+    # and adds tens of milliseconds to every ping. So it must run after all measurements.
+    snap["probes"]["host_wifi"] = probe.host_wifi()
 
     # --- clients -------------------------------------------------------------
     node_by_id = {n["id"]: n for n in nodes}
@@ -223,7 +255,9 @@ def collect(cfg, password, *, client=JnapClient, pinger=ping_host, now=time.time
         mac = conns[0].get("macAddress", "").upper()
         w = wl.get(mac)
         kinds = {i.get("interfaceType") for i in dev.get("knownInterfaces", [])}
-        node_id = (w or {}).get("node_id") or conns[0].get("parentDeviceID")
+        # The device list is current; the wireless table only records signal when a
+        # device connects or roams, so it is used for numbers, not for placement.
+        node_id = conns[0].get("parentDeviceID") or (w or {}).get("node_id")
         parent = node_by_id.get(node_id)
         snap["clients"].append({
             "mac": mac, "name": _client_name(dev, mac), "ip": conns[0].get("ipAddress"),
@@ -235,21 +269,10 @@ def collect(cfg, password, *, client=JnapClient, pinger=ping_host, now=time.time
         })
     for c in snap["clients"]:
         n = node_by_id.get(c["node_id"])
-        if n and c["kind"] == "wireless" and (
-                c["age_s"] is None or c["age_s"] <= cfg.stale_client_seconds):
+        if n and c["kind"] == "wireless":
             n["clients"] += 1
+            if c["band"] == "2.4GHz":
+                n["clients_24ghz"] += 1
 
     snap["nodes"] = nodes
     return snap
-
-
-def _ping_one(pinger, ip, label):
-    loss, rtt = pinger(ip)
-    return {"target": ip, "label": label, "loss": loss, "rtt_ms": rtt}
-
-
-def _ping_many(pinger, targets, label):
-    if not targets:
-        return []
-    with ThreadPoolExecutor(max_workers=len(targets)) as pool:
-        return list(pool.map(lambda t: _ping_one(pinger, t, label), targets))

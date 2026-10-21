@@ -25,7 +25,10 @@ The body is a JSON object (usually `{}`).
 | `nodes/topologyoptimization/Get/SetTopologyOptimizationSettings` | yes | Client steering (`isClientSteeringEnabled`). |
 | `router/GetWANStatus3` | yes | WAN status, address, gateway. |
 | `wirelessap/GetRadioInfo3` | yes | Radios: SSID, enabled, BSSID. Works on **each node directly**. |
-| `core/Reboot` | yes | Reboot (experimental). |
+| `core/Reboot` | yes | Reboot (experimental, not verified). |
+| `router/GetLANSettings` | yes | DHCP pool (`dhcpSettings.firstClientIPAddress` / `lastClientIPAddress`). |
+| `router/GetDHCPClientLeases` | yes | Current leases. |
+| `diagnostics/StartPing` + `diagnostics/GetPingStatus` | yes | Ping **from the router**. Input `{"host", "packetSizeBytes", "pingCount"}`; the key is `pingCount` (`count` is rejected). Poll `GetPingStatus` until `isRunning` is false and read `pingLog`. |
 
 ## Things that surprised us
 
@@ -36,7 +39,8 @@ The body is a JSON object (usually `{}`).
   Do not read it as a live link rate.
 - **`GetNetworkConnections2` reports signal as a small positive number (SNR-like)**, while
   `GetNodesWirelessNetworkConnections` reports negative dBm. Use the latter.
-- **Wireless entries of sleeping devices linger** with an old timestamp. Check the age.
+- **Wireless signal data is not live.** `GetNodesWirelessNetworkConnections` records a device's signal when it connects or roams; on a stable network most entries are hours old (we saw 40 minutes to 38 hours) and `lastTriggered` can be a day old. Treat dBm as "last reported" and show its age. The **device list** (`GetDevices3`) is current, so use its `connections[].parentDeviceID` to decide which node a device is on.
+- **Prefer the backhaul address for a node.** After a failed setup the device entry can keep an address from a second network the node briefly created; the backhaul entry has the mesh-side address.
 - **A reset node can still answer on your LAN** if it rejoined by Wi-Fi, and a re-add in the app can
   leave a half-registered entry that counts as a node but has no backhaul ("ghost").
 - Node names default to `LINKSYS<last 5 digits of serial>`; clients often have a UUID as name.

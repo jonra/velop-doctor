@@ -30,8 +30,8 @@ def evaluate(snap, cfg):
             if worst >= 10 or (rtts and max(rtts) > 150):
                 out.append(_f("internet_lossy", WARNING, "Internet connection is unstable",
                               f"Up to {worst:.0f}% packet loss"
-                              + (f", latency up to {max(rtts):.0f} ms" if rtts else "") + ".",
-                              120))
+                              + (f", latency up to {max(rtts):.0f} ms" if rtts else "") + "."
+                              + _where(snap), 120))
 
     if not primary.get("reachable"):
         out.append(_f("primary_unreachable", CRITICAL, "Main node is unreachable",
@@ -53,13 +53,13 @@ def evaluate(snap, cfg):
                       f"The Velop's WAN address is private ({wan.get('ip')}), so it sits behind "
                       "another router. Usually fine, but it can break port forwarding and some "
                       "games or calls. Consider bridge mode on the upstream router."))
+    out += _probe_findings(snap, cfg)
 
     nodes = snap.get("nodes", [])
     in_mesh = [n for n in nodes if n["in_mesh"]]
     ssids = {r["ssid"] for n in in_mesh if n["role"] == "primary"
              for r in n["radios"] if r.get("ssid")}
-    wireless_clients = [c for c in snap.get("clients", [])
-                        if c["kind"] == "wireless" and _fresh(c, cfg)]
+    wireless_clients = [c for c in snap.get("clients", []) if c["kind"] == "wireless"]
 
     for n in nodes:
         name = n["name"]
@@ -73,7 +73,8 @@ def evaluate(snap, cfg):
             continue
         if n["reachable"] is False:
             out.append(_f(f"node_down:{n['id']}", CRITICAL, f"{name} is offline",
-                          f"{n['ip']} does not answer pings.", 60))
+                          (f"{n['ip']} does not answer pings." if n["ip"]
+                           else "The main node lists it but it has no address on the network."), 60))
             continue
         if n["loss"] is not None and n["loss"] >= 20:
             out.append(_f(f"node_flaky:{n['id']}", WARNING, f"{name} drops packets",
@@ -124,12 +125,102 @@ def evaluate(snap, cfg):
                       "With several nodes, steering nudges devices to the closest one. "
                       "Without it, devices stay where they first connected."))
 
-    weak = [c for c in wireless_clients if c["dbm"] is not None and c["dbm"] <= cfg.weak_dbm]
+    slow = [c for c in wireless_clients if c.get("mbps") is not None and c["mbps"] <= 11
+            and _fresh(c, cfg)]
+    if slow:
+        out.append(_f("slow_devices", INFO, f"{len(slow)} device(s) connected at 11 Mbps or less",
+                      "A slow device needs far longer on the air to send the same data, which "
+                      "slows everyone sharing that radio. Usually small IoT gadgets; move them to "
+                      "a guest network or closer to a node if they matter. "
+                      + ", ".join(c["name"] for c in slow[:5]) + ("…" if len(slow) > 5 else "")))
+    for n in in_mesh:
+        if n.get("clients_24ghz", 0) >= 12:
+            out.append(_f(f"crowded_24:{n['id']}", INFO, f"{n['name']} has {n['clients_24ghz']} devices on 2.4 GHz",
+                          "The 2.4 GHz band is slow and shared. Many devices on one node's 2.4 GHz "
+                          "radio can make it feel sluggish."))
+    dhcp = snap.get("dhcp")
+    if dhcp and dhcp["pool"] and dhcp["leases"] / dhcp["pool"] >= 0.8:
+        out.append(_f("dhcp_full", WARNING, "The DHCP address pool is almost full",
+                      f"{dhcp['leases']} of {dhcp['pool']} addresses are leased. New devices may "
+                      "fail to connect. Widen the pool or shorten the lease time in the Linksys app."))
+
+    weak = [c for c in wireless_clients
+            if c["dbm"] is not None and c["dbm"] <= cfg.weak_dbm and _fresh(c, cfg)]
     if weak:
         weak.sort(key=lambda c: c["dbm"])
         out.append(_f("weak_clients", WARNING, f"{len(weak)} device(s) with a weak signal",
-                      "; ".join(f"{c['name']} {c['dbm']} dBm on {c['node']}" for c in weak[:6])
+                      "Last reported signal: "
+                      + "; ".join(f"{c['name']} {c['dbm']} dBm on {c['node']}" for c in weak[:6])
                       + ("…" if len(weak) > 6 else ""), cfg.weak_seconds))
+    return out
+
+
+def flapping_findings(snap, count_events, now, window=3600, threshold=3):
+    """A node that keeps dropping out is worse than one that dropped once."""
+    out = []
+    for n in snap.get("nodes", []):
+        if not n["in_mesh"]:
+            continue
+        count = count_events("node_offline", n["name"], now - window)
+        if count >= threshold:
+            out.append(_f(f"flapping:{n['id']}", CRITICAL, f"{n['name']} keeps dropping out",
+                          f"It stopped answering {count} times in the last hour. Look at its "
+                          "power supply, cable and position.", 0))
+    return out
+
+
+def _where(snap):
+    """Use the router's own ping as a second vantage point on an unstable connection."""
+    rp = (snap.get("probes") or {}).get("router_ping")
+    if not rp:
+        return ""
+    if rp["loss"] < 5 and (rp["rtt_ms"] or 0) < 60:
+        return (" The router itself sees the internet fine, so the problem is between this "
+                "computer and the router (Wi-Fi signal or cable).")
+    return " The router sees it too, so the problem is upstream: modem, line or ISP."
+
+
+def _probe_findings(snap, cfg):
+    out = []
+    pr = snap.get("probes") or {}
+    dns = {d["label"]: d for d in pr.get("dns", [])}
+    if dns.get("public", {}).get("ok"):
+        router = dns.get("router")
+        if router and not router["ok"]:
+            out.append(_f("dns_router", CRITICAL, "The Velop's DNS is not answering",
+                          "Name lookups through the router fail while a public resolver works. "
+                          "Websites fail to load even though the internet is up. Reboot the main "
+                          "node, or set another DNS server in the Linksys app.", 60))
+        elif router and router["ms"] and router["ms"] > 250:
+            out.append(_f("dns_slow", WARNING, "Name lookups through the Velop are slow",
+                          f"{router['ms']:.0f} ms to resolve a name. Pages will feel slow to start.", 300))
+        isp = dns.get("isp")
+        if isp and not isp["ok"]:
+            out.append(_f("dns_isp", WARNING, "Your ISP's DNS server is not answering",
+                          f"{isp['server']} does not resolve names while a public resolver does. "
+                          "Switching the router to 1.1.1.1 or 8.8.8.8 avoids it.", 120))
+    tcp = pr.get("tcp", [])
+    if tcp and all(t["ms"] is None for t in tcp) and any(i["loss"] < 100 for i in snap.get("internet", [])):
+        out.append(_f("tcp_blocked", WARNING, "The internet answers pings but refuses connections",
+                      "ICMP gets through but TCP port 443 does not. Look for a firewall, "
+                      "filtering DNS or ISP problem.", 60))
+    mtu = pr.get("mtu")
+    if mtu and mtu < 1500:
+        out.append(_f("mtu_low", INFO, f"Path MTU is {mtu}, below the usual 1500",
+                      "Typical for PPPoE or tunnelled connections (1492). Harmless when the router "
+                      "is set to match; if some sites hang while others load, check the router's MTU."))
+    hw = pr.get("host_wifi")
+    if hw and ((hw.get("snr_db") is not None and hw["snr_db"] < 20) or hw["signal_dbm"] <= -75):
+        out.append(_f("host_wifi_weak", WARNING, "This computer's own Wi-Fi link is weak",
+                      f"Signal {hw['signal_dbm']} dBm"
+                      + (f", SNR {hw['snr_db']} dB" if hw.get("snr_db") is not None else "")
+                      + ". Measurements taken from here may look worse than the rest of the network."
+                      " Move closer to a node, or run the monitor on a wired computer.", 300))
+    jumpy = [i for i in snap.get("internet", []) if (i.get("jitter_ms") or 0) > 30]
+    if jumpy:
+        out.append(_f("jitter_internet", WARNING, "Internet latency is jumpy",
+                      "Latency varies by more than 30 ms between pings to "
+                      + ", ".join(i["target"] for i in jumpy) + ". Video calls and games suffer first.", 300))
     return out
 
 
@@ -149,6 +240,10 @@ def diff_events(prev, cur):
         if old is None:
             events.append(("info", "node_added", f"{n['name']} appeared in the node list"))
             continue
+        if old.get("reachable") is True and n.get("reachable") is False:
+            events.append(("warning", "node_offline", f"{n['name']} stopped answering", n["name"]))
+        if old.get("reachable") is False and n.get("reachable") is True:
+            events.append(("info", "node_online", f"{n['name']} is answering again", n["name"]))
         if old["in_mesh"] != n["in_mesh"]:
             events.append(("warning" if not n["in_mesh"] else "info", "mesh_membership",
                            f"{n['name']} {'joined' if n['in_mesh'] else 'left'} the mesh"))

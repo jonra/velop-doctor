@@ -9,7 +9,8 @@ Standard library only: nothing to install except Python 3.9+.
 - **Network map**: nodes, who connects through whom, wired or wireless backhaul, link speed.
 - **Nodes** table: reachable? answering its API? **in sync with the mesh?** firmware, ping, Wi-Fi device count.
 - **Devices** table: every online device, which node it is on, band, signal, link rate.
-- **Latency** charts for every node, your upstream router and the internet.
+- **Connection tests**: DNS timing through the Velop, your ISP and a public resolver; TCP reachability; path MTU; the internet seen from the router *and* from this computer (so you can tell a bad line from bad Wi-Fi); this computer's own Wi-Fi quality; DHCP pool usage.
+- **Latency** charts for every node, your upstream router and the internet, plus 24-hour uptime per node.
 - **Timeline** of changes: nodes dropping out, backhaul switching to wireless, devices roaming, WAN address changes, gaps in monitoring.
 - **Actions** (always with a preview and a confirm step): turn client steering on or off, reboot a node.
 
@@ -19,9 +20,12 @@ Standard library only: nothing to install except Python 3.9+.
 python3 -m pip install -e .
 
 velop-doctor serve --demo   # made-up data, to look around
-velop-doctor setup          # find the main node, store the admin password
-velop-doctor serve          # dashboard on http://127.0.0.1:8765
+velop-doctor serve          # dashboard on http://127.0.0.1:8765; first run asks for the password in the page
 ```
+
+On first run the page asks for your main node's address and the admin password, checks them
+against your Velop, and stores the password in your keychain. Prefer the terminal?
+`velop-doctor setup` does the same thing.
 
 Other commands:
 
@@ -72,6 +76,7 @@ collector ──▶ snapshot (JSON) ──▶ analyzer ──▶ findings ──
   password**. A node that answers pings but rejects the password is not following
   the main node's settings. That is how a half-added node gives itself away.
 - `analyzer.py` is pure functions over snapshots, so it is easy to test.
+- `probes.py` holds the active probes (ping with jitter, DNS, TCP, MTU, router-side ping, DHCP, host Wi-Fi), each of which gives up quickly and never raises.
 - `store.py` only reports a finding after it has persisted for its `min_seconds`,
   and restarts that clock after a gap in monitoring (a sleeping laptop is not an hour of outage).
 - `actions.py` previews every change, applies it, then reads the setting back to verify.
@@ -83,8 +88,12 @@ See [`../docs/checks.md`](../docs/checks.md) for every check.
 - Monitoring only happens while the computer running it is awake. Gaps show as gaps.
 - Backhaul speed is a **periodic measurement** made by the node, not a live reading;
   the dashboard shows how old it is.
-- Wi-Fi signal values for devices that went to sleep can be stale; they are dimmed
-  and ignored by the weak-signal check after 10 minutes.
+- **Signal values are "last reported", not live.** The Velop records a device's signal when it connects
+  or roams. The dashboard shows how old each value is, dims readings over 2 hours old, and the
+  weak-signal check ignores readings over 24 hours old. Which node a device is on *is* current.
+- **On macOS, reading this computer's own Wi-Fi link makes the radio scan**, which adds ~40 ms to
+  pings running at that moment. The monitor reads it at most every 10 minutes and never during a
+  measurement. (We found this the hard way: it made the Wi-Fi look terrible in our own numbers.)
 - Node reboot uses `core/Reboot` and is **experimental**: not every firmware may support it.
 - Tested on WHW03 v2. Other models: please report.
 

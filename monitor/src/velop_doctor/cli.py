@@ -13,7 +13,6 @@ from .backend import DemoBackend, LiveBackend
 from .collector import collect
 from .demo import make_snapshot
 from .jnap import AuthError, JnapClient, JnapError
-from .poller import Poller
 from .server import App, serve
 from .store import Store
 
@@ -78,23 +77,22 @@ def cmd_serve(args):
     cfg = config.load()
     cfg.port = args.port or cfg.port
     if args.demo:
-        backend, store = DemoBackend(cfg), Store(":memory:")
+        store = Store(":memory:")
         _seed_demo(store, cfg, "problems")
     else:
-        if not cfg.primary:
-            print("Not set up yet. Run: velop-doctor setup   (or try: velop-doctor serve --demo)")
-            return 1
-        password = config.get_password(cfg)
-        if not password:
-            print("No stored password found. Run: velop-doctor setup")
-            return 1
-        backend, store = LiveBackend(cfg, password), Store(cfg.db_path)
-    poller = Poller(backend, store, cfg)
-    app = App(cfg, backend, store, poller, host=args.host)
+        store = Store(cfg.db_path)
+    app = App(cfg, None, store, None, host=args.host, guess=detect_gateway())
+    if args.demo:
+        app.attach(DemoBackend(cfg))
+    else:
+        password = config.get_password(cfg) if cfg.primary else None
+        if password:
+            app.attach(LiveBackend(cfg, password))
     httpd = serve(app, args.host, cfg.port)
-    poller.start()
     print(f"velop-doctor {__version__}{' (demo data)' if args.demo else ''}: "
           f"http://{args.host}:{cfg.port}   (Ctrl-C to stop)")
+    if not app.configured:
+        print("Not connected to a Velop yet: open the address above to finish setup in the browser.")
     if args.host not in ("127.0.0.1", "localhost", "::1"):
         print("WARNING: listening beyond this computer. The dashboard has no login, and "
               "anyone who can reach it can use its actions (e.g. reboot a node).")
@@ -103,7 +101,8 @@ def cmd_serve(args):
     except KeyboardInterrupt:
         pass
     finally:
-        poller.stop()
+        if app.poller:
+            app.poller.stop()
         httpd.server_close()
     return 0
 

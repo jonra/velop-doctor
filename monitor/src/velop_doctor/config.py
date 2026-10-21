@@ -31,8 +31,9 @@ class Config:
     weak_dbm: int = -80               # clients at or below this are "weak"
     weak_seconds: int = 300           # ...for at least this long
     idle_node_seconds: int = 900      # a node with 0 clients this long is flagged
-    stale_client_seconds: int = 600   # wireless entries older than this are ignored
+    stale_client_seconds: int = 86400  # signal readings older than this are ignored
     retention_days: int = 7
+    router_ping: bool = True          # also ping the internet from the router itself
 
     @property
     def db_path(self):
@@ -57,9 +58,17 @@ def load():
 
 
 def save(cfg):
+    """Write only the settings that differ from the defaults (plus the Velop's address).
+
+    Saving every default would freeze today's defaults in the file, so an improved default
+    in a later version would never reach existing users.
+    """
+    defaults = asdict(Config())
+    data = {k: v for k, v in asdict(cfg).items()
+            if k in ("primary", "username") or v != defaults[k]}
     path = config_path()
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(asdict(cfg), indent=2) + "\n")
+    path.write_text(json.dumps(data, indent=2) + "\n")
 
 
 # --- password storage -------------------------------------------------------

@@ -99,3 +99,33 @@ def cfg():
 
 def pinger_ok(ip, count=3):
     return 0.0, 5.0
+
+
+class StubProbes:
+    """Stands in for velop_doctor.probes so collector tests never touch the network."""
+
+    def __init__(self, **over):
+        self.dns = over.get("dns", {"ok": True, "ms": 20.0})
+        self.tcp = over.get("tcp", 15.0)
+        self.mtu = over.get("mtu", 1500)
+        self.wifi = over.get("wifi", None)
+        self.rping = over.get("rping", {"target": "1.1.1.1", "loss": 0.0, "rtt_ms": 9.0})
+        self.dhcp = over.get("dhcp", {"pool": 245, "leases": 40})
+
+    def dns_probe(self, server, *a, **k):
+        return self.dns(server) if callable(self.dns) else dict(self.dns)
+
+    def tcp_probe(self, host, *a, **k):
+        return self.tcp
+
+    def path_mtu(self, ip="1.1.1.1"):
+        return self.mtu
+
+    def host_wifi(self):
+        return self.wifi
+
+    def router_ping(self, client, target="1.1.1.1", **k):
+        return self.rping
+
+    def dhcp_usage(self, client):
+        return self.dhcp

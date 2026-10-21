@@ -1,6 +1,7 @@
 """Local web server: JSON API plus the single-page dashboard (standard library only)."""
 from __future__ import annotations
 
+import ipaddress
 import json
 import secrets
 import threading
@@ -9,30 +10,89 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
-from . import __version__
+from . import __version__, config
 from .actions import ActionError
+from .jnap import AuthError, JnapClient, JnapError
 
 INDEX = Path(__file__).parent / "web" / "index.html"
 
 
 class App:
-    def __init__(self, cfg, backend, store, poller, host="127.0.0.1"):
+    """Holds the running pieces. Starts "unconfigured" when no Velop is set up yet."""
+
+    def __init__(self, cfg, backend, store, poller, host="127.0.0.1", client=JnapClient,
+                 guess=None, make_backend=None):
         self.cfg, self.backend, self.store, self.poller = cfg, backend, store, poller
         self.token = secrets.token_urlsafe(24)
         self.allowed_hosts = {"localhost", "127.0.0.1", "[::1]", host}
         self.action_lock = threading.Lock()
+        self.client, self.guess = client, guess
+        self.make_backend = make_backend
+
+    @property
+    def configured(self):
+        return self.backend is not None
+
+    def attach(self, backend):
+        """(Re)start polling with `backend`; stops the previous poller if any."""
+        from .poller import Poller
+        if self.poller:
+            self.poller.stop()
+        self.backend = backend
+        self.poller = Poller(backend, self.store, self.cfg)
+        self.poller.start()
 
     def state(self):
+        if not self.configured:
+            return {"version": __version__, "demo": False, "setup_required": True,
+                    "now": int(time.time()), "primary": self.cfg.primary or self.guess or "",
+                    "username": self.cfg.username, "snapshot": None, "findings": [],
+                    "health": "unknown", "last_error": None, "interval": self.cfg.interval}
         snap = self.store.latest_snapshot()
         findings = self.store.active_findings()
         severities = {f["severity"] for f in findings}
         health = "critical" if "critical" in severities else \
             "warning" if "warning" in severities else "ok"
-        return {"version": __version__, "demo": self.backend.demo, "now": int(time.time()),
+        now = int(time.time())
+        return {"version": __version__, "demo": self.backend.demo, "now": now,
                 "interval": self.cfg.interval, "snapshot": snap, "findings": findings,
-                "health": health if snap else "unknown", "last_error": self.poller.last_error}
+                "health": health if snap else "unknown", "last_error": self.poller.last_error,
+                "availability_24h": self.store.availability(now - 86400),
+                "primary": self.cfg.primary, "username": self.cfg.username}
+
+    def setup(self, body):
+        """Validate credentials against the Velop, store them, start monitoring."""
+        host = str(body.get("primary") or "").strip()
+        user = str(body.get("username") or "admin").strip() or "admin"
+        password = body.get("password") or ""
+        try:
+            addr = ipaddress.ip_address(host)
+        except ValueError:
+            return 400, {"ok": False, "message": "Enter the IP address of your main node, for example 192.168.1.1."}
+        if not (addr.is_private or addr.is_link_local):
+            return 400, {"ok": False, "message": "That is not a local network address. The password is only ever sent to your own network."}
+        if not password:
+            return 400, {"ok": False, "message": "Enter the admin password."}
+        try:
+            self.client(host, user, password).call("core/GetDeviceInfo", auth=False)
+        except JnapError:
+            return 400, {"ok": False, "message": f"No Linksys node answered at {host}."}
+        try:
+            self.client(host, user, password).call("devicelist/GetDevices3")
+        except AuthError:
+            return 400, {"ok": False, "message": "The node rejected that password."}
+        except JnapError as e:
+            return 400, {"ok": False, "message": f"The login test failed ({e.result})."}
+        self.cfg.primary, self.cfg.username = host, user
+        config.save(self.cfg)
+        where = config.set_password(self.cfg, password)
+        from .backend import LiveBackend
+        self.attach((self.make_backend or LiveBackend)(self.cfg, password))
+        return 200, {"ok": True, "message": f"Connected. Password stored in {where}."}
 
     def handle_action(self, body):
+        if not self.configured:
+            return 400, {"ok": False, "message": "Connect to your Velop first."}
         action = body.get("action")
         params = body.get("params") or {}
         if action == "refresh":
@@ -107,14 +167,15 @@ def make_handler(app):
                 return self._send(403, {"error": "bad origin"})
             if self.headers.get("X-Velop-Token") != app.token:
                 return self._send(403, {"error": "missing or wrong token"})
-            if urlparse(self.path).path != "/api/actions":
+            path = urlparse(self.path).path
+            if path not in ("/api/actions", "/api/setup"):
                 return self._send(404, {"error": "not found"})
             try:
                 length = int(self.headers.get("Content-Length") or 0)
                 body = json.loads(self.rfile.read(min(length, 65536)) or b"{}")
             except ValueError:
                 return self._send(400, {"error": "invalid json"})
-            status, payload = app.handle_action(body)
+            status, payload = app.setup(body) if path == "/api/setup" else app.handle_action(body)
             self._send(status, payload)
 
     return Handler

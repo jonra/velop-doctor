@@ -62,3 +62,34 @@ class SnapshotTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class AvailabilityAndEventTests(unittest.TestCase):
+    def test_availability_counts_answered_samples(self):
+        s, cfg = Store(":memory:"), Config(primary="x")
+        for t in range(1000, 1500, 100):
+            snap = make_snapshot(cfg, "healthy", now=t)
+            if t == 1200:
+                [n for n in snap["nodes"] if n["name"] == "Hall"][0].update(loss=100.0, rtt_ms=None)
+            s.add_snapshot(snap)
+        av = s.availability(0)["node:Hall"]
+        self.assertEqual((av["samples"], av["up_pct"]), (5, 80.0))
+
+    def test_count_events_by_subject_and_window(self):
+        s = Store(":memory:")
+        s.add_event(100, "warning", "node_offline", "x", "Hall")
+        s.add_event(200, "warning", "node_offline", "x", "Hall")
+        s.add_event(200, "warning", "node_offline", "x", "Bedroom")
+        self.assertEqual(s.count_events("node_offline", "Hall", 0), 2)
+        self.assertEqual(s.count_events("node_offline", "Hall", 150), 1)
+
+    def test_old_database_without_subject_column_is_migrated(self):
+        import sqlite3, tempfile, os
+        path = os.path.join(tempfile.mkdtemp(), "old.db")
+        db = sqlite3.connect(path)
+        db.execute("CREATE TABLE events (id INTEGER PRIMARY KEY AUTOINCREMENT, ts INTEGER NOT NULL, "
+                   "severity TEXT NOT NULL, kind TEXT NOT NULL, message TEXT NOT NULL)")
+        db.commit(); db.close()
+        s = Store(path)
+        s.add_event(1, "info", "k", "m", "subject")
+        self.assertEqual(s.count_events("k", "subject", 0), 1)

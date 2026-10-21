@@ -33,10 +33,11 @@ class Poller(threading.Thread):
                 snap["ts"], "info", "gap",
                 f"No data for {(snap['ts'] - prev['ts']) // 60} min (computer asleep or app stopped)")
         self.store.add_snapshot(snap)
-        for severity, kind, message in analyzer.diff_events(prev, snap):
-            self.store.add_event(snap["ts"], severity, kind, message)
-        self.store.update_conditions(snap["ts"], analyzer.evaluate(snap, self.cfg),
-                                     gap_seconds=self.gap_seconds)
+        for event in analyzer.diff_events(prev, snap):
+            self.store.add_event(snap["ts"], *event)
+        findings = analyzer.evaluate(snap, self.cfg)
+        findings += analyzer.flapping_findings(snap, self.store.count_events, snap["ts"])
+        self.store.update_conditions(snap["ts"], findings, gap_seconds=self.gap_seconds)
         if snap["ts"] - self._last_prune > 3600:
             self.store.prune(snap["ts"], self.cfg.retention_days)
             self._last_prune = snap["ts"]

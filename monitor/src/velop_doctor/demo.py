@@ -11,8 +11,8 @@ def _node(id_, name, ip, role, **kw):
     n = {"id": id_, "name": name, "serial": "DEMO" + id_[-4:].upper(), "ip": ip, "role": role,
          "firmware": "2.1.20.216892", "parent_id": MAIN if role == "node" else None,
          "parent_ip": "192.168.1.1" if role == "node" else None, "backhaul": None,
-         "in_mesh": True, "reachable": True, "loss": 0.0, "rtt_ms": 4.0, "api_ok": True,
-         "auth_ok": True, "default_pw": False, "clients": 0,
+         "in_mesh": True, "reachable": True, "loss": 0.0, "rtt_ms": 4.0, "jitter_ms": 0.8, "api_ok": True,
+         "auth_ok": True, "default_pw": False, "clients": 0, "clients_24ghz": 0,
          "radios": [{"id": r, "band": b, "bssid": None, "enabled": True, "ssid": "Home Wi-Fi",
                      "broadcast": True, "channel": 0}
                     for r, b in (("RADIO_2.4GHz", "2.4GHz"), ("RADIO_5GHz", "5GHz"),
@@ -71,6 +71,8 @@ def make_snapshot(cfg, scenario="problems", steering=False, now=None):
             "mbps": mbps, "age_s": 20, "vendor": None})
         if kind == "wireless":
             node["clients"] += 1
+            if band == "2.4GHz":
+                node["clients_24ghz"] += 1
 
     return {
         "ts": ts,
@@ -81,9 +83,20 @@ def make_snapshot(cfg, scenario="problems", steering=False, now=None):
                 "gateway": "192.168.178.1", "double_nat": True},
         "steering": steering,
         "internet": [
-            {"target": "1.1.1.1", "label": "internet", "loss": 0.0, "rtt_ms": 24 + 6 * wob},
-            {"target": "8.8.8.8", "label": "internet", "loss": 0.0, "rtt_ms": 15 + 3 * wob}],
+            {"target": "1.1.1.1", "label": "internet", "loss": 0.0, "rtt_ms": 24 + 6 * wob, "jitter_ms": 3.1},
+            {"target": "8.8.8.8", "label": "internet", "loss": 0.0, "rtt_ms": 15 + 3 * wob, "jitter_ms": 2.2}],
         "upstream": {"target": "192.168.178.1", "label": "upstream", "loss": 0.0,
                      "rtt_ms": 7 + wob},
         "errors": {},
+        "probes": {
+            "dns": [{"label": "router", "server": "192.168.1.1", "ok": True, "ms": 18 + 4 * wob},
+                    {"label": "isp", "server": "84.116.46.23", "ok": not problems, "ms": None if problems else 26.0},
+                    {"label": "public", "server": "1.1.1.1", "ok": True, "ms": 14.0}],
+            "tcp": [{"target": "1.1.1.1:443", "ms": 17 + 3 * wob}, {"target": "8.8.8.8:443", "ms": 16.0}],
+            "mtu": 1492,
+            "host_wifi": {"signal_dbm": -57, "noise_dbm": -94, "snr_db": 37, "channel": 100,
+                          "band": "5GHz", "rate_mbps": 702, "phy": "802.11ac"},
+            "router_ping": {"target": "1.1.1.1", "loss": 0.0, "rtt_ms": 10.5},
+        },
+        "dhcp": {"pool": 245, "leases": 214 if problems else 39},
     }
