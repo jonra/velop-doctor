@@ -23,6 +23,11 @@ classifiers = [
 ]
 dependencies = []
 
+[project.urls]
+Homepage = "https://github.com/jonra/velop-doctor"
+Issues = "https://github.com/jonra/velop-doctor/issues"
+Changelog = "https://github.com/jonra/velop-doctor/blob/main/CHANGELOG.md"
+
 [project.scripts]
 velop-doctor = "velop_doctor.cli:main"
 

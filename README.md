@@ -1,5 +1,8 @@
 # velop-doctor
 
+[![tests](https://github.com/jonra/velop-doctor/actions/workflows/test.yml/badge.svg)](https://github.com/jonra/velop-doctor/actions/workflows/test.yml)
+[![license: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+
 Debugging tools for **Linksys Velop** mesh networks, for when the official app
 tells you everything is fine and the Wi-Fi says otherwise.
 

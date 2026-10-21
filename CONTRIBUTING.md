@@ -62,4 +62,4 @@ containing `passphrase`, `key` or `password`.
 ## Security issues
 
 If you find a way to make the dashboard act on a network it should not, please
-report it privately to the maintainers rather than in a public issue.
+report it privately rather than in a public issue: see [SECURITY.md](SECURITY.md).
