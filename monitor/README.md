@@ -35,6 +35,7 @@ velop-doctor check                   # one-off report in the terminal; exit code
 velop-doctor steering on             # change client steering from the terminal
 velop-doctor mcp --port 8765          # MCP server for Claude (stdio); needs the dashboard running
 velop-doctor mcp --http --port 8765   # the same over HTTP, with a bearer token printed at startup
+velop-doctor mcp --http --no-auth     # ...or without a token (localhost only; any local program can then use the tools)
 velop-doctor mcp-token                # show (or --rotate) that token
 velop-doctor install-service         # start the dashboard at login (launchd / systemd --user)
 velop-doctor uninstall-service

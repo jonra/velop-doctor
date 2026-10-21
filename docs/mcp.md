@@ -41,7 +41,7 @@ claude mcp add --transport http velop-doctor http://localhost:8780/mcp \
 ```
 
 - URL: `http://localhost:8780/mcp` (`--listen-port` changes it). Every request must carry
-  `Authorization: Bearer <token>`; there is no way to turn that off.
+  `Authorization: Bearer <token>`, unless you choose `--no-auth` (below).
 - The token lives in `~/.velop-doctor/mcp-token` (mode 600), is created on first use, and
   `velop-doctor mcp-token` shows it again. `velop-doctor mcp-token --rotate` replaces it.
 - It listens on `127.0.0.1` only. To reach it from another machine, pass `--host` (a VPN address such
@@ -52,6 +52,21 @@ claude mcp add --transport http velop-doctor http://localhost:8780/mcp \
   via `Mcp-Session-Id`, no server-initiated stream. Browsers cannot drive it: `Origin` is checked, and on
   a loopback listener so is `Host`.
 - If you run it as a background service, the startup message, token included, goes to that service's log.
+
+### Without a token (`--no-auth`)
+
+On a computer only you use, you can skip the token:
+
+```bash
+velop-doctor mcp --http --no-auth --port 8765
+claude mcp add --transport http velop-doctor http://localhost:8780/mcp
+```
+
+The trade-off: **any program running on this computer can call the tools, including `reboot_node`.**
+Pair it with `--read-only` if you only want Claude to look. Two protections stay on regardless:
+web pages are still refused (`Origin` and `Host` are checked), and `--no-auth` is **refused on any
+address other than localhost**, so it can never be combined with `--host 0.0.0.0` or a LAN/VPN address.
+(Over HTTP with a token, or over stdio, nothing changes.)
 
 ## Tools
 

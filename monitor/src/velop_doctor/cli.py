@@ -169,14 +169,27 @@ def cmd_mcp(args):
         server.serve_stdio()
         return 0
     from .mcp_http import serve_http
-    token = config.get_mcp_token()
-    app, httpd = serve_http(server, token, args.host, args.listen_port, allow_origins=args.allow_origin or ())
+    if args.no_auth and args.host not in ("127.0.0.1", "localhost", "::1"):
+        print(f"Refusing to run without a token while listening on {args.host}: that would let anyone on the "
+              "network reboot your nodes. Drop --no-auth (a token is created for you), or keep the default "
+              "--host 127.0.0.1.", file=sys.stderr)
+        return 2
+    token = None if args.no_auth else config.get_mcp_token()
+    app, httpd = serve_http(server, token, args.host, args.listen_port,
+                            allow_origins=args.allow_origin or (), require_auth=not args.no_auth)
     shown = "localhost" if args.host in ("127.0.0.1", "0.0.0.0") else args.host
     print(f"velop-doctor MCP over HTTP: http://{shown}:{args.listen_port}/mcp"
           f"   (reads the dashboard at {url}; {'read-only; ' if read_only else ''}Ctrl-C to stop)")
-    print(f"\nBearer token (every request needs it): {token}")
-    print(f'Claude Code:  claude mcp add --transport http velop-doctor http://{shown}:{args.listen_port}/mcp '
-          f'--header "Authorization: Bearer {token}"\n')
+    url_ = f"http://{shown}:{args.listen_port}/mcp"
+    if args.no_auth:
+        print("\nNO AUTHENTICATION (--no-auth). Any program on this computer can call these tools"
+              + ("" if read_only else ", including reboot_node") + ". Web pages are still blocked "
+              "(Origin and Host are checked). Add --read-only to remove the tools that change anything.")
+        print(f"Claude Code:  claude mcp add --transport http velop-doctor {url_}\n")
+    else:
+        print(f"\nBearer token (every request needs it): {token}")
+        print(f'Claude Code:  claude mcp add --transport http velop-doctor {url_} '
+              f'--header "Authorization: Bearer {token}"\n')
     if not app.loopback:
         print("WARNING: listening beyond this computer. The token is the only protection and the connection "
               "is plain HTTP: use it only on a network you trust (a VPN such as Tailscale is ideal).")
@@ -241,6 +254,8 @@ def main(argv=None):
     s.add_argument("--host", default="127.0.0.1", help="HTTP listen address (default 127.0.0.1; use 0.0.0.0 or a VPN address to reach it from elsewhere)")
     s.add_argument("--listen-port", type=int, default=8780, help="HTTP listen port (default 8780)")
     s.add_argument("--allow-origin", action="append", help="extra browser Origin to accept (repeatable)")
+    s.add_argument("--no-auth", action="store_true",
+                   help="HTTP without a bearer token. Only on localhost: any local program can then use the tools")
     s.set_defaults(func=cmd_mcp)
 
     s = sub.add_parser("mcp-token", help="show (or --rotate) the bearer token for MCP over HTTP")

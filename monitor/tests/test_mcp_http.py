@@ -185,6 +185,53 @@ class ExposedListenerTests(HttpCase):
         self.assertEqual(self.request(body={}, headers={"Origin": "https://evil.example"})[0], 403)
 
 
+class NoAuthTests(HttpCase):
+    """The owner may choose to run without a token on localhost; browsers are still kept out."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.app, cls.httpd = serve_http(echo_server(), None, "127.0.0.1", 0, require_auth=False)
+        threading.Thread(target=cls.httpd.serve_forever, daemon=True).start()
+        cls.url = f"http://127.0.0.1:{cls.httpd.server_address[1]}/mcp"
+
+    def initialize(self, version="2025-06-18"):
+        status, body, headers = self.request(token=None, body={
+            "jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {"protocolVersion": version}})
+        self.assertEqual(status, 200)
+        return headers["Mcp-Session-Id"], body
+
+    def test_no_token_needed_and_a_stray_one_is_ignored(self):
+        session, _ = self.initialize()
+        ping = {"jsonrpc": "2.0", "id": 1, "method": "ping"}
+        self.assertEqual(self.request(token=None, body=ping, session=session)[0], 200)
+        self.assertEqual(self.request(token="whatever", body=ping, session=session)[0], 200)
+
+    def test_browsers_and_rebinding_are_still_refused(self):
+        ping = {"jsonrpc": "2.0", "id": 1, "method": "ping"}
+        self.assertEqual(self.request(token=None, body=ping, headers={"Origin": "https://evil.example"})[0], 403)
+        self.assertEqual(self.request(token=None, body=ping, headers={"Host": "evil.example"})[0], 403)
+
+    def test_sessions_and_everything_else_still_apply(self):
+        ping = {"jsonrpc": "2.0", "id": 1, "method": "ping"}
+        self.assertEqual(self.request(token=None, body=ping)[0], 400)
+        self.assertEqual(self.request(token=None, method="GET")[0], 405)
+
+    def test_it_is_refused_on_anything_but_loopback(self):
+        for host in ("0.0.0.0", "192.168.1.50"):
+            with self.subTest(host=host), self.assertRaises(ValueError):
+                McpHttp(echo_server(), None, host=host, require_auth=False)
+
+    def test_the_command_line_refuses_the_dangerous_combination_before_binding(self):
+        from velop_doctor import cli
+        import contextlib
+        import io
+        err = io.StringIO()
+        with contextlib.redirect_stderr(err):
+            code = cli.main(["mcp", "--http", "--no-auth", "--host", "0.0.0.0", "--listen-port", "0"])
+        self.assertEqual(code, 2)
+        self.assertIn("Refusing to run without a token", err.getvalue())
+
+
 class ExtraOriginTests(HttpCase):
     allow_origins = ("https://my-tool.example",)
 

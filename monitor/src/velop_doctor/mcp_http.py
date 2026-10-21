@@ -1,7 +1,9 @@
 """MCP over Streamable HTTP (spec 2025-06-18), standard library only.
 
-One endpoint (default /mcp). Every request needs `Authorization: Bearer <token>`: this server can
-reboot nodes, so there is no unauthenticated mode, and it listens on 127.0.0.1 unless told otherwise.
+One endpoint (default /mcp). Every request needs `Authorization: Bearer <token>` unless the owner
+explicitly chooses `require_auth=False` (the CLI's `--no-auth`, refused on any non-loopback address).
+It listens on 127.0.0.1 unless told otherwise. Origin (and Host on loopback) are checked either way,
+so a web page cannot drive it even without a token.
 
 What is implemented, deliberately small:
 - POST: a JSON-RPC request gets a JSON reply; a notification or reply gets 202 with no body.
@@ -35,11 +37,14 @@ def _hostname(value):
 
 
 class McpHttp:
-    def __init__(self, server, token, *, host="127.0.0.1", path="/mcp", allow_origins=()):
-        if not token:
-            raise ValueError("an access token is required")
-        self.server, self.token, self.path = server, token, path
+    def __init__(self, server, token, *, host="127.0.0.1", path="/mcp", allow_origins=(), require_auth=True):
         self.loopback = host in ("127.0.0.1", "localhost", "::1")
+        if require_auth and not token:
+            raise ValueError("an access token is required")
+        if not require_auth and not self.loopback:
+            raise ValueError("running without a token is only allowed on a loopback address")
+        self.server, self.token, self.path = server, token or "", path
+        self.require_auth = require_auth
         self.allowed_hosts = LOOPBACK_NAMES | ({host} if self.loopback is False and host != "0.0.0.0" else set())
         self.allowed_origins = set(allow_origins)
         self.sessions = {}  # session id -> negotiated protocol version
@@ -57,6 +62,8 @@ class McpHttp:
         return _hostname(origin.split("://", 1)[-1]) in LOOPBACK_NAMES
 
     def token_ok(self, header):
+        if not self.require_auth:
+            return True
         scheme, _, supplied = (header or "").partition(" ")
         return scheme.lower() == "bearer" and hmac.compare_digest(supplied.strip().encode(), self.token.encode())
 
@@ -179,6 +186,6 @@ def make_handler(app):
     return Handler
 
 
-def serve_http(server, token, host, port, **options):
+def serve_http(server, token, host, port, **options):  # options: allow_origins, require_auth
     app = McpHttp(server, token, host=host, **options)
     return app, ThreadingHTTPServer((host, port), make_handler(app))
